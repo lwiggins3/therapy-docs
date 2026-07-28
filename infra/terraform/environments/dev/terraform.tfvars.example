@@ -1,0 +1,3 @@
+project_id       = "therapy-docs-dev"
+region           = "us-central1"
+workspace_domain = "example-clinic.com"

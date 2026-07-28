@@ -1,0 +1,32 @@
+{
+  "name": "@therapy-docs/worker",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- tsx watch src/main.ts",
+    "build": "node build.mjs",
+    "start": "dotenv -e ../../.env -- node dist/main.js",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "dotenv -e ../../.env -- vitest run"
+  },
+  "dependencies": {
+    "@google-cloud/documentai": "^8.12.0",
+    "@therapy-docs/audit": "workspace:*",
+    "@therapy-docs/db": "workspace:*",
+    "@therapy-docs/llm-client": "workspace:*",
+    "@therapy-docs/shared-types": "workspace:*",
+    "@therapy-docs/storage": "workspace:*",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@therapy-docs/config": "workspace:*",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.8.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10"
+  }
+}

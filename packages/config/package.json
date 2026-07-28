@@ -1,0 +1,16 @@
+{
+  "name": "@therapy-docs/config",
+  "private": true,
+  "version": "0.1.0",
+  "main": "index.js",
+  "files": [
+    "tsconfig.base.json",
+    "eslint-preset.js"
+  ],
+  "dependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.8.0",
+    "typescript-eslint": "^8.65.0"
+  }
+}

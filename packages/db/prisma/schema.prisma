@@ -1,0 +1,202 @@
+// Core data model for therapy-docs. See ../../../docs/data-model.md for the narrative version.
+// Runs on Cloud SQL for PostgreSQL with the pgvector extension enabled for embedding columns.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+model Therapist {
+  id            String   @id @default(uuid())
+  email         String   @unique // Google Workspace identity
+  displayName   String
+  createdAt     DateTime @default(now())
+
+  patients      Patient[]
+  documents     LibraryDocument[]
+  transcripts   Transcript[]
+  emailDrafts   EmailDraft[]
+
+  @@map("therapists")
+}
+
+model Patient {
+  id           String   @id @default(uuid())
+  therapistId  String
+  displayName  String
+  externalMrn  String? // optional pointer to the practice's EHR record; no PHI beyond a display name is stored here
+  createdAt    DateTime @default(now())
+
+  therapist    Therapist    @relation(fields: [therapistId], references: [id])
+  transcripts  Transcript[]
+  recommendations Recommendation[]
+  emailDrafts  EmailDraft[]
+
+  @@index([therapistId])
+  @@map("patients")
+}
+
+enum ProcessingStatus {
+  processing
+  ready
+  failed
+}
+
+model LibraryDocument {
+  id            String           @id @default(uuid())
+  therapistId   String
+  title         String
+  gcsUri        String
+  mimeType      String
+  status        ProcessingStatus @default(processing)
+  // 1536-dim embedding (adjust to match the configured embedding model); indexed via pgvector ivfflat/hnsw in a migration.
+  embedding     Unsupported("vector(1536)")?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  therapist     Therapist        @relation(fields: [therapistId], references: [id])
+  tags          DocumentTagAssignment[]
+  recommendations Recommendation[]
+  emailDraftDocuments EmailDraftDocument[]
+
+  @@index([therapistId])
+  @@map("library_documents")
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  label     String   @unique
+  createdAt DateTime @default(now())
+
+  documents DocumentTagAssignment[]
+
+  @@map("tags")
+}
+
+enum TagSource {
+  manual
+  llm_suggested
+}
+
+model DocumentTagAssignment {
+  documentId String
+  tagId      String
+  source     TagSource
+  // For llm_suggested tags pending therapist approval; manual tags are always confirmed.
+  confirmed  Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  document   LibraryDocument @relation(fields: [documentId], references: [id])
+  tag        Tag             @relation(fields: [tagId], references: [id])
+
+  @@id([documentId, tagId])
+  @@map("document_tag_assignments")
+}
+
+model Transcript {
+  id           String           @id @default(uuid())
+  patientId    String
+  therapistId  String
+  gcsUri       String
+  status       ProcessingStatus @default(processing)
+  sessionDate  DateTime?
+  embedding    Unsupported("vector(1536)")?
+  createdAt    DateTime         @default(now())
+
+  patient      Patient          @relation(fields: [patientId], references: [id])
+  therapist    Therapist        @relation(fields: [therapistId], references: [id])
+  recommendations Recommendation[]
+  emailDrafts  EmailDraft[]
+
+  @@index([patientId])
+  @@index([therapistId])
+  @@map("transcripts")
+}
+
+enum RecommendationStatus {
+  suggested
+  accepted
+  rejected
+  added_by_therapist
+}
+
+model Recommendation {
+  id           String               @id @default(uuid())
+  transcriptId String
+  patientId    String
+  documentId   String
+  status       RecommendationStatus @default(suggested)
+  rationale    String?
+  createdAt    DateTime             @default(now())
+  decidedAt    DateTime?
+
+  transcript   Transcript      @relation(fields: [transcriptId], references: [id])
+  patient      Patient         @relation(fields: [patientId], references: [id])
+  document     LibraryDocument @relation(fields: [documentId], references: [id])
+
+  @@index([transcriptId])
+  @@index([patientId])
+  @@map("recommendations")
+}
+
+model EmailDraft {
+  id           String   @id @default(uuid())
+  patientId    String
+  transcriptId String
+  therapistId  String
+  gmailDraftId String // never sent programmatically — therapist reviews/sends from their own mailbox
+  createdAt    DateTime @default(now())
+
+  patient      Patient    @relation(fields: [patientId], references: [id])
+  transcript   Transcript @relation(fields: [transcriptId], references: [id])
+  therapist    Therapist  @relation(fields: [therapistId], references: [id])
+  documents    EmailDraftDocument[]
+
+  @@map("email_drafts")
+}
+
+model EmailDraftDocument {
+  emailDraftId String
+  documentId   String
+
+  emailDraft   EmailDraft      @relation(fields: [emailDraftId], references: [id])
+  document     LibraryDocument @relation(fields: [documentId], references: [id])
+
+  @@id([emailDraftId, documentId])
+  @@map("email_draft_documents")
+}
+
+enum AuditAction {
+  transcript_view
+  transcript_llm_process
+  transcript_export
+  document_view
+}
+
+enum AuditResourceType {
+  transcript
+  document
+}
+
+// Insert-only. Application code must never update or delete rows here — see packages/audit.
+// Mirrored into BigQuery for immutable, long-term (7-year) retention per docs/hipaa-compliance.md.
+model AuditEvent {
+  id           String            @id @default(uuid())
+  actorId      String
+  action       AuditAction
+  resourceType AuditResourceType
+  resourceId   String
+  patientId    String?
+  occurredAt   DateTime          @default(now())
+  sourceIp     String?
+
+  @@index([resourceType, resourceId])
+  @@index([patientId])
+  @@map("audit_events")
+}

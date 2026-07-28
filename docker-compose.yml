@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: therapy_docs
+    ports:
+      - "5432:5432"
+    volumes:
+      - therapy_docs_postgres:/var/lib/postgresql/data
+
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:emulators
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=therapy-docs-local
+    ports:
+      - "8085:8085"
+    # The emulator needs to reach apps/worker (running on the host, not in Docker) to deliver
+    # push-subscription messages — see WORKER_PUSH_URL in .env.example.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  therapy_docs_postgres:
