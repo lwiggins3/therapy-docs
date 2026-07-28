@@ -19,28 +19,67 @@ resource "google_service_account" "app" {
 # roles/iap.httpsResourceAccessor to a Google Group scoped to var.workspace_domain, once
 # modules/compute's backend services exist to attach IAP to.
 
-# Deferred to roadmap item 6 (CI/CD): Google requires an explicit attribute_condition on OIDC
-# workload identity pool providers, scoping which repos may assume this identity (e.g.
-# assertion.repository == "my-org/therapy-docs") — a placeholder here would either be wrong or
-# forgotten. Re-add this once the GitHub repo exists and CI/CD is actually being wired up.
-#
-# resource "google_iam_workload_identity_pool" "github" {
-#   project                   = var.project_id
-#   workload_identity_pool_id = "github-actions-${var.environment}"
-#   display_name              = "GitHub Actions (${var.environment})"
-# }
-#
-# resource "google_iam_workload_identity_pool_provider" "github" {
-#   project                            = var.project_id
-#   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
-#   workload_identity_pool_provider_id = "github"
-#   display_name                       = "GitHub"
-#   attribute_mapping = {
-#     "google.subject"       = "assertion.sub"
-#     "attribute.repository" = "assertion.repository"
-#   }
-#   attribute_condition = "assertion.repository == 'CHANGEME/therapy-docs'"
-#   oidc {
-#     issuer_uri = "https://token.actions.githubusercontent.com"
-#   }
-# }
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+resource "google_iam_workload_identity_pool" "github" {
+  project                   = var.project_id
+  workload_identity_pool_id = "github-actions-${var.environment}"
+  display_name              = "GitHub Actions (${var.environment})"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  project                            = var.project_id
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github"
+  display_name                       = "GitHub"
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
+  }
+  # Scoped to this specific repo — Google requires an attribute_condition on OIDC providers;
+  # without one, ANY GitHub Actions workflow anywhere could potentially assume this identity.
+  attribute_condition = "assertion.repository == 'lwiggins3/therapy-docs'"
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+# Distinct from the 3 runtime service accounts above — this is what GitHub Actions impersonates
+# via WIF to build/push images and deploy Cloud Run revisions. Never used as a Cloud Run
+# service's own runtime identity.
+resource "google_service_account" "deploy" {
+  project      = var.project_id
+  account_id   = "therapy-docs-deploy-${var.environment}"
+  display_name = "therapy-docs CI/CD deploy (${var.environment})"
+}
+
+resource "google_project_iam_member" "deploy_run_developer" {
+  project = var.project_id
+  role    = "roles/run.developer"
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_project_iam_member" "deploy_artifact_registry_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# Deploying a Cloud Run revision that runs *as* one of the app service accounts requires
+# permission to "act as" that service account.
+resource "google_service_account_iam_member" "deploy_can_act_as_apps" {
+  for_each           = google_service_account.app
+  service_account_id = each.value.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# Lets GitHub Actions (scoped to this repo, via the provider's attribute_condition above)
+# impersonate the deploy service account — no long-lived key ever leaves GCP.
+resource "google_service_account_iam_member" "github_actions_can_impersonate_deploy" {
+  service_account_id = google_service_account.deploy.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github.workload_identity_pool_id}/attribute.repository/lwiggins3/therapy-docs"
+}

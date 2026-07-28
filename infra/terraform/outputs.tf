@@ -25,3 +25,11 @@ output "transcripts_bucket_name" {
 output "audit_dataset_id" {
   value = module.data.audit_dataset_id
 }
+
+output "workload_identity_provider" {
+  value = module.iam.workload_identity_provider
+}
+
+output "deploy_service_account_email" {
+  value = module.iam.deploy_service_account_email
+}

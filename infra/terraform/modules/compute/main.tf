@@ -28,6 +28,13 @@ resource "google_cloud_run_v2_service" "web" {
       image = local.placeholder_image
     }
   }
+
+  # CI/CD (see .github/workflows/deploy.yml) deploys real images via `gcloud run deploy`,
+  # outside Terraform. Without this, the next `apply` would revert the running image back to
+  # the placeholder, fighting the deploy pipeline for ownership of this field.
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
+  }
 }
 
 resource "google_cloud_run_v2_service" "api" {
@@ -48,6 +55,10 @@ resource "google_cloud_run_v2_service" "api" {
       image = local.placeholder_image
     }
   }
+
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
+  }
 }
 
 resource "google_cloud_run_v2_service" "worker" {
@@ -67,6 +78,10 @@ resource "google_cloud_run_v2_service" "worker" {
     containers {
       image = local.placeholder_image
     }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
   }
 }
 
