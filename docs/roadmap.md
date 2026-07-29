@@ -101,9 +101,16 @@ revisit alongside that.
       builds/pushes/deploys `api` first then queries its live URL to bake into `web`'s build
       (`NEXT_PUBLIC_API_URL` is inlined at Next.js build time). All GCP identifiers come from
       GitHub repo variables (`gh variable set`), never hardcoded in the workflow file
-- [ ] Trigger the first real deploy and confirm all three Cloud Run services serve real app code
-      instead of the `hello` placeholder
-- [ ] Once real images are deployed, revisit IAP-in-front-of-`web`/`api` (see item 2's note)
+- [x] Triggered the first real deploy — all three Cloud Run services now run real app images.
+      First attempt failed: `apps/worker` only read `WORKER_PORT` (baked to 8081 in its
+      Dockerfile) and never checked Cloud Run's injected `PORT` (8080), so the container never
+      listened where Cloud Run's startup health check expected — timed out and failed to deploy.
+      `apps/api` happened to work only because its own hardcoded default coincidentally matches
+      Cloud Run's default. Fixed by having `apps/worker` prefer `PORT`, falling back to
+      `WORKER_PORT` for local dev; redeployed clean.
+- [ ] Once real images are deployed, revisit IAP-in-front-of-`web`/`api` (see item 2's note) — for
+      now, all 3 services correctly return 403 to unauthenticated requests since nothing grants
+      `allUsers` invoker yet
 
 ## 7. Compliance (not code, but blocking for real patient data)
 
