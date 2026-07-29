@@ -84,11 +84,25 @@ revisit alongside that.
 
 ## 6. CI/CD
 
-- [ ] Push this repo to GitHub
-- [ ] Re-add the Workload Identity Federation pool/provider in `infra/terraform/modules/iam`
-      (commented out during item 2 — needs a real `attribute_condition` scoped to this repo,
-      which didn't exist yet when that was hit)
-- [ ] Wire up GitHub Actions to deploy to Cloud Run using that WIF pool
+- [x] Pushed this repo to GitHub (public) — required scrubbing real Workspace domain/Cloud Run
+      URLs/bucket names that had leaked into docs first, then squashing history to a single clean
+      commit before the first-ever push (those strings were embedded in earlier commits too)
+- [x] Dockerfiles for all three apps (`apps/web`, `apps/api`, `apps/worker`), Turborepo-prune
+      3-stage pattern, built and verified locally against real Prisma queries / a fabricated
+      Pub/Sub push / real HTTP routes — not just health checks
+- [x] Re-added the Workload Identity Federation pool/provider in `infra/terraform/modules/iam`
+      (commented out during item 2) with a real `attribute_condition` scoped to
+      `lwiggins3/therapy-docs`; added a dedicated `deploy` service account (distinct from the 3
+      runtime service accounts) with `roles/run.developer`, `roles/artifactregistry.writer`, and
+      `serviceAccountUser` on each app's service account
+      Also added `lifecycle.ignore_changes` on each Cloud Run service's `image` field, so CI/CD
+      and Terraform don't fight over ownership of it going forward
+- [x] `.github/workflows/deploy.yml` — manual (`workflow_dispatch`) trigger, WIF-authenticated,
+      builds/pushes/deploys `api` first then queries its live URL to bake into `web`'s build
+      (`NEXT_PUBLIC_API_URL` is inlined at Next.js build time). All GCP identifiers come from
+      GitHub repo variables (`gh variable set`), never hardcoded in the workflow file
+- [ ] Trigger the first real deploy and confirm all three Cloud Run services serve real app code
+      instead of the `hello` placeholder
 - [ ] Once real images are deployed, revisit IAP-in-front-of-`web`/`api` (see item 2's note)
 
 ## 7. Compliance (not code, but blocking for real patient data)
