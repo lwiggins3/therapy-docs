@@ -1,0 +1,86 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev
+  IMAGE_BASE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REGISTRY_REPO }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+    outputs:
+      api_url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - run: |
+          docker build -f apps/api/Dockerfile \
+            -t ${{ env.IMAGE_BASE }}/api:${{ github.sha }} .
+          docker push ${{ env.IMAGE_BASE }}/api:${{ github.sha }}
+
+      - id: deploy
+        run: |
+          gcloud run deploy therapy-docs-api-dev \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ vars.GCP_REGION }} \
+            --image=${{ env.IMAGE_BASE }}/api:${{ github.sha }}
+          url=$(gcloud run services describe therapy-docs-api-dev \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ vars.GCP_REGION }} \
+            --format='value(status.url)')
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+  deploy-web-and-worker:
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - run: |
+          docker build -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL=${{ needs.deploy-api.outputs.api_url }} \
+            -t ${{ env.IMAGE_BASE }}/web:${{ github.sha }} .
+          docker push ${{ env.IMAGE_BASE }}/web:${{ github.sha }}
+
+      - run: |
+          docker build -f apps/worker/Dockerfile \
+            -t ${{ env.IMAGE_BASE }}/worker:${{ github.sha }} .
+          docker push ${{ env.IMAGE_BASE }}/worker:${{ github.sha }}
+
+      - run: |
+          gcloud run deploy therapy-docs-web-dev \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ vars.GCP_REGION }} \
+            --image=${{ env.IMAGE_BASE }}/web:${{ github.sha }}
+
+      - run: |
+          gcloud run deploy therapy-docs-worker-dev \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ vars.GCP_REGION }} \
+            --image=${{ env.IMAGE_BASE }}/worker:${{ github.sha }}
