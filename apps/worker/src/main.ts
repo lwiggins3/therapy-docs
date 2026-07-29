@@ -104,7 +104,9 @@ app.post("/pubsub/transcript-ingest", async (req, res) => {
   }
 });
 
-const port = process.env.WORKER_PORT ?? 8081;
+// Cloud Run injects PORT and expects the container to listen on it; WORKER_PORT is only
+// consulted for local dev, where apps/api and apps/worker run side by side on the host.
+const port = process.env.PORT ?? process.env.WORKER_PORT ?? 8081;
 app.listen(port, () => {
   console.log(`worker listening on ${port}`);
 });
