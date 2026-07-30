@@ -378,3 +378,35 @@ remove a library document or a transcript once uploaded, from the UI or the API.
       mirroring the ownership checks already used in `updateTags`/`EmailDraftsService.finalize`
 - [ ] `apps/web`: a delete action on `/documents` (per document row) and `/transcripts` (per
       transcript row), with a confirmation step before removing
+
+## 10. Tag suggestion feedback loop (feature request)
+
+The system is currently stateless with respect to tag review outcomes. Reject just
+`db.documentTagAssignment.delete()`s the row — nothing records that a tag was suggested-and-
+rejected, for this document or in general. Manual add's only downstream effect is that the new
+label joins the global `existingTags` vocabulary list passed into every future `suggestTags()`
+prompt (`buildSuggestTagsPrompt`'s "prefer reusing one of these over inventing a near-duplicate")
+— a shared vocabulary hint, not a learning signal; it doesn't tell the model *which documents*
+warrant *which* tags. Confirm just flips `confirmed: true`, with no feedback to the LLM at all.
+Net effect: ten rejections of the same bad suggestion on similar documents would produce the same
+suggestion an eleventh time.
+
+- [ ] Include a handful of recent accept/reject decisions as few-shot examples in the
+      `suggestTags` prompt (`packages/llm-client/src/suggest-tags.ts`) — no fine-tuning
+      infrastructure needed, just richer prompt context. Needs a query for "recent confirmed vs.
+      rejected `DocumentTagAssignment` rows" that doesn't exist yet. Tradeoff: prompt size/cost
+      grows with example count — needs a sensible cap. Tracked in
+      [#8](https://github.com/lwiggins3/therapy-docs/issues/8).
+
+## 11. Style the application (feature request)
+
+`apps/web` currently has zero design system — plain semantic HTML (`<main>`, `<ul>`, `<form>`),
+no CSS framework/component library, only scattered inline `style={{}}` in a couple of spots. Fine
+for a functional prototype, not for something a therapist would actually want to use day to day.
+
+- [ ] Add real visual styling/branding across all of `apps/web`'s pages (`/documents`,
+      `/transcripts`, `/patients`, `/settings`, upload/review screens) — a consistent layout,
+      typography, color palette, and basic component styling (buttons, forms, status badges,
+      nav). Needs a design-approach decision (Tailwind, CSS modules, a component library, etc.)
+      before implementation. Tracked in
+      [#9](https://github.com/lwiggins3/therapy-docs/issues/9).
