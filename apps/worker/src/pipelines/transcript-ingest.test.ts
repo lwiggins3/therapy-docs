@@ -175,6 +175,25 @@ describe("handleTranscriptIngest", () => {
     expect(rows[0]?.has_embedding).toBe(true);
   });
 
+  it("is idempotent against Pub/Sub redelivery — does not duplicate recommendations", async () => {
+    const document = await seedReadyDocument("Coping skills worksheet", "anxiety");
+    const { transcript, storage, uri } = await seedTranscript("Patient discussed anxiety coping strategies.");
+
+    const llmClient = new StubLlmClient();
+    llmClient.recommendDocumentsResult = [
+      { documentId: document.id, rationale: "Directly relevant to today's session", score: 0.85 },
+    ];
+    const auditLogger = new StubAuditLogger();
+    const deps = { storage, textExtractor: new PlainTextTextExtractor(), llmClient, auditLogger };
+
+    await handleTranscriptIngest({ transcriptId: transcript.id, gcsUri: uri }, deps);
+    await handleTranscriptIngest({ transcriptId: transcript.id, gcsUri: uri }, deps);
+
+    const recommendations = await db.recommendation.findMany({ where: { transcriptId: transcript.id } });
+    expect(recommendations).toHaveLength(1);
+    expect(auditLogger.events).toHaveLength(1);
+  });
+
   it("marks the transcript failed if the LLM call throws", async () => {
     const { transcript, storage, uri } = await seedTranscript("Some transcript text.");
     const llmClient = new StubLlmClient();

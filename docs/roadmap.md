@@ -105,13 +105,26 @@ revisit alongside that.
       a separate `embeddingLocation`, defaulting to `GCP_REGION` in `apps/worker/src/main.ts`.
       Affects `document-ingest.ts` too (pre-existing, not new to item 4) — was never caught
       because this pipeline had never been exercised against a live model before now.
-- [ ] **Still not verified**: actual recommendation quality/output. After fixing the above, real
-      calls now fail with `PERMISSION_DENIED: Spend cap breached for project ... aiplatform.googleapis.com`
-      — a GCP billing spend cap on the project, blocking every Vertex AI call (Claude and Gemini,
-      embeddings and chat). Needs to be raised/removed in the Cloud Billing console before a real
-      recommendation-quality smoke test is possible (same "unverified against a live model" caveat
-      item 1 had before item 2's real GCP access existed, now one layer deeper: auth got fixed,
-      billing is the new blocker).
+- [x] **Recommendation quality verified against a live model** (Gemini — see note below on
+      Claude): seeded 3 tagged library documents (anxiety coping skills, sleep hygiene, couples
+      communication) and a transcript describing panic attacks + a request for concrete coping
+      techniques. Result: correctly recommended *only* the anxiety-coping-skills document — zero
+      false positives against the two unrelated documents — with a specific, transcript-grounded
+      rationale ("the patient reported multiple panic attacks and expressed a specific interest in
+      learning 'concrete techniques' like breathing or grounding exercises..."). Tag suggestions
+      on the 3 seed documents were also independently accurate (e.g. "Anxiety," "Panic Attacks,"
+      "Grounding Techniques" for the anxiety document).
+- [x] Fixed a second real bug surfaced by this test: `handleTranscriptIngest` wasn't idempotent
+      against Pub/Sub's at-least-once redelivery — a concurrent redelivery raced the first
+      attempt and produced two identical `Recommendation` rows for one transcript. Fixed with a
+      guard at the top of the handler (`if (transcript.status === "ready") return;` — status only
+      flips to `ready` after a full successful run, so it doubles as the idempotency signal, no
+      dedup table needed). Covered by a new test case in `transcript-ingest.test.ts`.
+- [ ] **Claude on Model Garden specifically still unverified**: the hardcoded default model id
+      (`claude-sonnet-5@20260101` in `ClaudeVertexLlmClient`) 404s in this project — not deployed/
+      enabled at that path in this project's Model Garden. Verified the pipeline itself is correct
+      using `LLM_PROVIDER=gemini` instead. Check the project's Model Garden page for the actual
+      available Claude model id/version before relying on the `claude-vertex` provider for real.
 
 ## 5. Therapist review → draft email
 

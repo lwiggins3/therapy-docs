@@ -34,6 +34,14 @@ export async function handleTranscriptIngest(
       where: { id: message.transcriptId },
     });
 
+    // Pub/Sub push subscriptions are at-least-once — a redelivery (or an overlapping concurrent
+    // delivery racing an in-flight one) must not re-run the LLM call and duplicate Recommendation
+    // rows. Status flips to "ready" only after a full successful run, so it doubles as the
+    // idempotency signal — no separate dedup table needed.
+    if (transcript.status === "ready") {
+      return;
+    }
+
     await deps.auditLogger.record({
       actorId: transcript.therapistId,
       action: "transcript.llm_process",
