@@ -28,6 +28,20 @@ can't resolve multi-file workspace packages at runtime — see each app's README
 seed + `/dev/therapist` shim (no real auth yet), and a `LOCAL_STORAGE_DIR` fix (must be an
 absolute path since `apps/api`/`apps/worker` run from different directories).
 
+- [ ] **Bug, confirmed by the real end-to-end browser test (item 6)**: real PDF uploads come back
+      with the LLM itself reporting "unreadable content," "corrupted file," "technical issue" for
+      suggested tags — not a model quality problem, a text-extraction problem. `TEXT_EXTRACTOR`
+      is set to `plain` everywhere (local and deployed) because no Document AI processor has ever
+      been provisioned; `PlainTextTextExtractor` (`apps/worker/src/lib/text-extraction.ts`)
+      UTF-8-decodes the raw file bytes, which works for `.txt`/`.md` but produces binary garbage
+      for real PDFs — the LLM is correctly recognizing that garbage as unreadable. This was
+      flagged as a "known limitation" caveat as far back as item 4's local testing (synthetic test
+      files were plain text mislabeled as `application/pdf` to work around it) but never actually
+      fixed. Needs: provision a real Document AI processor in the GCP project (`DOCUMENT_AI_
+      PROCESSOR_ID`), switch `TEXT_EXTRACTOR=document-ai` for `apps/worker` (local and deployed),
+      and smoke-test against a real scanned/real PDF end to end — `DocumentAiTextExtractor` is
+      already written but has never been exercised against a live processor.
+
 ## 2. Real GCP dev environment — DONE (see `docs/runbooks/gcp-dev-setup.md`)
 
 - [x] GCP dev project created (`therapy-docs`, billing linked) and required APIs enabled
@@ -193,6 +207,13 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       project-wide — for `apps/api/src/lib/token-store.ts`'s on-demand `gmail-token-*` secret
       creation) is now written — see item 6's "real Cloud Run runtime config" entry below, which
       also picks up the `ack_deadline_seconds = 600` fix once applied.
+- [ ] **Bug, found during the real end-to-end browser test**: the Gmail draft doesn't actually
+      attach the approved document(s) — `EmailDraftsService.finalize()` (`apps/api/src/
+      email-drafts/email-drafts.service.ts`) only ever built a plain-text message (subject + body
+      mentioning the documents by title); nothing in `buildRawEmailMessage()` fetches the
+      document's bytes from GCS or attaches them as a MIME part. Needs a real multipart/MIME
+      message (subject + body + one attachment per approved document, fetched via
+      `StorageClient.download()`) instead of the current single-part text message.
 
 ## 6. CI/CD
 
@@ -268,11 +289,12 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
         can reach the app at all* — it doesn't yet make the app therapist-aware per real identity;
         everyone who gets through still operates as the single seeded dev therapist. Worth its
         own pass.
-- [ ] **Still needed**: `terraform apply` (add `iap_accessor_members`/`api_url`/the updated
-      `gmail_oauth_redirect_uri` to `terraform.tfvars` first), add the new web-based redirect URI
-      to the OAuth client in Console, push + redeploy, then the real test: visit `web`'s real URL
-      **directly in a browser** (no more `gcloud run services proxy` needed for `web` at all) and
-      run through Connect Gmail → upload → tag → transcript → recommendation → finalize.
+- [x] `terraform apply` run against the real dev project. Hit and fixed one more real bug along
+      the way: `roles/iap.httpsResourceAccessor` lives on IAP's *own* IAM policy for the protected
+      resource, not Cloud Run's — `google_cloud_run_v2_service_iam_member` rejected it outright
+      ("Role roles/iap.httpsResourceAccessor is not supported for this resource"). Fixed with the
+      dedicated `google_iap_web_cloud_run_service_iam_member` resource (also `google-beta` only,
+      same as `iap_enabled` itself). New redirect URI added to the OAuth client in Console.
 - [x] **Found while trying to actually test the deployed app: it couldn't have worked at all.**
       The 3 Cloud Run services had zero environment configuration — no `DATABASE_URL`, no GCS
       bucket names, no LLM provider, no Gmail OAuth credentials, nothing (only `image` was set).
@@ -311,13 +333,19 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       - **Known limitation carried forward, not new**: `TEXT_EXTRACTOR=plain` for the deployed
         worker too (no Document AI processor provisioned) — real PDF uploads get UTF-8-decoded
         garbage text in the deployed env, same as local dev
-- [ ] **Still needed**: you run `terraform apply` (add the 3 new tfvars first), re-trigger
-      `deploy.yml` so real images with items 4/5's features actually reach Cloud Run (the
-      currently-deployed images predate both), run a one-off `gcloud run jobs execute` schema push
-      against the real Cloud SQL instance (no public IP — nothing outside the VPC can reach it any
-      other way), add the second Authorized redirect URI in Console, then the real smoke test:
-      `gcloud run services proxy`, connect Gmail, upload → tag → transcript → recommendation →
-      draft, confirm a real draft from the *deployed* app this time
+- [x] `terraform apply` run, `deploy.yml` re-triggered (real images with items 4/5's features now
+      on Cloud Run), schema pushed onto the real Cloud SQL instance via a one-off
+      `gcloud run jobs execute` (no public IP — nothing outside the VPC can reach it any other
+      way; the job ran `prisma db push` using the already-built `worker` image, then was deleted),
+      dev therapist seeded the same way.
+- [x] **Real end-to-end browser test against the deployed app — done.** Signed in via IAP as a
+      real Workspace user, connected Gmail through the real OAuth consent screen, uploaded a real
+      document, uploaded a real transcript, got a recommendation, finalized a draft. The mechanism
+      works end to end. Three real gaps surfaced by actually using it for real, all tracked below:
+      document/transcript deletion is missing entirely (item 9), the Gmail draft doesn't attach
+      the actual file (item 5's note), and real PDF text extraction is producing garbage the LLM
+      itself flags as unreadable (item 1's note) — this last one is the "known limitation carried
+      forward" above, now with concrete evidence instead of a theoretical caveat.
 
 ## 7. Compliance (not code, but blocking for real patient data)
 
@@ -330,3 +358,16 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
 - [ ] `apps/web`'s upload form should accept a folder, not just individual files — recursively
       walking all nested subfolders and documents inside it and uploading each one through the
       existing per-document pipeline (item 1)
+
+## 9. Delete documents and transcripts (feature request)
+
+Found missing during the real end-to-end browser test (item 6) — there's currently no way to
+remove a library document or a transcript once uploaded, from the UI or the API.
+
+- [ ] `apps/api`: `DELETE /documents/:id` (remove the `LibraryDocument` row + its
+      `DocumentTagAssignment`/`Recommendation`/`EmailDraftDocument` references, and the underlying
+      GCS object via `StorageClient`) and `DELETE /transcripts/:id` (same, for `Transcript` +
+      its `Recommendation`/`EmailDraft` references) — both scoped to the calling therapist,
+      mirroring the ownership checks already used in `updateTags`/`EmailDraftsService.finalize`
+- [ ] `apps/web`: a delete action on `/documents` (per document row) and `/transcripts` (per
+      transcript row), with a confirmation step before removing
