@@ -117,3 +117,9 @@ revisit alongside that.
 - [ ] Execute the GCP BAA covering every service in `docs/hipaa-compliance.md`
 - [ ] Execute the separate Google Workspace BAA (IAP SSO + Gmail API — see the documented
       exception in `docs/hipaa-compliance.md`)
+
+## 8. Folder upload (feature request)
+
+- [ ] `apps/web`'s upload form should accept a folder, not just individual files — recursively
+      walking all nested subfolders and documents inside it and uploading each one through the
+      existing per-document pipeline (item 1)
