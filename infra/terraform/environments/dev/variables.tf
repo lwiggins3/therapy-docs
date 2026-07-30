@@ -10,3 +10,16 @@ variable "region" {
 variable "workspace_domain" {
   type = string
 }
+
+variable "gmail_oauth_client_id" {
+  type = string
+}
+
+variable "gmail_oauth_client_secret" {
+  type      = string
+  sensitive = true
+}
+
+variable "gmail_oauth_redirect_uri" {
+  type = string
+}

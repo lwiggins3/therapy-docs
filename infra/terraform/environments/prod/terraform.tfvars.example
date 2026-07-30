@@ -1,3 +1,9 @@
 project_id       = "therapy-docs-prod"
 region           = "us-central1"
 workspace_domain = "example-clinic.com"
+
+# See environments/dev/terraform.tfvars.example's comment — same pattern, this environment's own
+# OAuth client (prod is typically a separate GCP project from dev, so a separate OAuth client too).
+gmail_oauth_client_id     = "your-client-id.apps.googleusercontent.com"
+gmail_oauth_client_secret = "your-client-secret"
+gmail_oauth_redirect_uri  = "https://therapy-docs-api-prod-xxxxxxxxxx-uc.a.run.app/gmail/callback"

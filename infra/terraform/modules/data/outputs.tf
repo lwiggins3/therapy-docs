@@ -13,3 +13,8 @@ output "transcripts_bucket_name" {
 output "audit_dataset_id" {
   value = google_bigquery_dataset.audit_logs.dataset_id
 }
+
+output "database_url_secret_id" {
+  description = "Secret Manager secret holding the fully-assembled DATABASE_URL for Cloud Run to reference."
+  value       = google_secret_manager_secret.database_url.secret_id
+}

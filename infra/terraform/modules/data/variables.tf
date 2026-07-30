@@ -6,6 +6,10 @@ variable "region" {
   type = string
 }
 
+variable "environment" {
+  type = string
+}
+
 variable "vpc_id" {
   description = "VPC (from modules/networking) Cloud SQL attaches to via private IP."
   type        = string

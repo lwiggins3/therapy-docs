@@ -9,6 +9,75 @@ resource "google_service_account" "app" {
   display_name = "therapy-docs ${each.key} (${var.environment})"
 }
 
+# --- Runtime grants for the app service accounts ---
+# Nothing granted these any permissions before now — the deployed api/worker couldn't reach
+# Cloud SQL, GCS, Pub/Sub, Vertex AI, Secret Manager, or BigQuery at all.
+
+resource "google_project_iam_member" "api_secretmanager_admin" {
+  project = var.project_id
+  role    = "roles/secretmanager.admin"
+  member  = "serviceAccount:${google_service_account.app["api"].email}"
+  # Project-wide, not per-secret: apps/api/src/lib/token-store.ts's SecretManagerTokenStore
+  # creates+adds a new "gmail-token-<therapistId>" secret at runtime, per therapist, on demand —
+  # there's no fixed set of secret IDs to scope a narrower grant to ahead of time. Narrow this
+  # (e.g. a condition on the "gmail-token-*" prefix) before real patient data.
+}
+
+resource "google_project_iam_member" "api_pubsub_publisher" {
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.app["api"].email}"
+}
+
+resource "google_project_iam_member" "api_aiplatform_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.app["api"].email}"
+}
+
+resource "google_project_iam_member" "worker_secretmanager_accessor" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.app["worker"].email}"
+}
+
+resource "google_project_iam_member" "worker_aiplatform_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.app["worker"].email}"
+}
+
+resource "google_project_iam_member" "worker_bigquery_data_editor" {
+  project = var.project_id
+  role    = "roles/bigquery.dataEditor"
+  member  = "serviceAccount:${google_service_account.app["worker"].email}"
+}
+
+# api uploads to both buckets, worker downloads from both.
+resource "google_storage_bucket_iam_member" "api_documents_bucket" {
+  bucket = var.documents_bucket_name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.app["api"].email}"
+}
+
+resource "google_storage_bucket_iam_member" "api_transcripts_bucket" {
+  bucket = var.transcripts_bucket_name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.app["api"].email}"
+}
+
+resource "google_storage_bucket_iam_member" "worker_documents_bucket" {
+  bucket = var.documents_bucket_name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.app["worker"].email}"
+}
+
+resource "google_storage_bucket_iam_member" "worker_transcripts_bucket" {
+  bucket = var.transcripts_bucket_name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.app["worker"].email}"
+}
+
 # NOTE: the IAP OAuth "brand" (consent screen) is intentionally NOT managed here.
 # `google_iap_brand` relies on the IAP OAuth Admin API, which Google deprecated in July 2025 —
 # the resource no longer reliably functions for creation. Configure the OAuth consent screen for

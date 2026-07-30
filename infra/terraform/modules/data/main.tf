@@ -106,6 +106,35 @@ resource "google_sql_database" "app" {
   instance = google_sql_database_instance.main.name
 }
 
+# --- App DB user + password, stored as a fully-assembled DATABASE_URL in Secret Manager ---
+# Direct VPC Egress + private IP (not the Cloud SQL Auth Proxy/unix-socket pattern), so Cloud Run
+# connects with a plain postgresql:// URL against the private IP, not `connection_name`.
+
+resource "random_password" "db_app_user" {
+  length  = 32
+  special = false # avoids URL-encoding characters like @/:? that would break the connection string
+}
+
+resource "google_sql_user" "app" {
+  project  = var.project_id
+  name     = "therapy_docs_app"
+  instance = google_sql_database_instance.main.name
+  password = random_password.db_app_user.result
+}
+
+resource "google_secret_manager_secret" "database_url" {
+  project   = var.project_id
+  secret_id = "therapy-docs-database-url-${var.environment}"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "database_url" {
+  secret      = google_secret_manager_secret.database_url.id
+  secret_data = "postgresql://${google_sql_user.app.name}:${random_password.db_app_user.result}@${google_sql_database_instance.main.private_ip_address}:5432/${google_sql_database.app.name}"
+}
+
 # --- GCS buckets: library documents + session transcripts ---
 
 resource "google_storage_bucket" "documents" {

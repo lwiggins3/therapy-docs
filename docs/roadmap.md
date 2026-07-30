@@ -193,13 +193,10 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       transcript/patient lookup, the approved-recommendations filter, and a **real** `draftEmail()`
       call against Gemini — before failing at the expected point: `"Therapist has not connected
       Gmail yet"`.
-- [ ] Deferred: once `TOKEN_STORE_PROVIDER` flips to `secret-manager` for a real deployment, the
-      `api` runtime service account needs a Secret Manager IAM grant (create/add-version/access on
-      its own `gmail-token-*` secrets) — no Terraform change needed for local dev.
-- [ ] **`terraform apply` needed**: the `ack_deadline_seconds = 600` fix above is written in
-      Terraform but not yet applied to the real dev environment — the manually-run local Pub/Sub
-      setup script already has it, but real Cloud Run deploys are still on the 10s default until
-      `infra/terraform/environments/dev` is applied.
+- [x] The `api` runtime service account's Secret Manager grant (`roles/secretmanager.admin`,
+      project-wide — for `apps/api/src/lib/token-store.ts`'s on-demand `gmail-token-*` secret
+      creation) is now written — see item 6's "real Cloud Run runtime config" entry below, which
+      also picks up the `ack_deadline_seconds = 600` fix once applied.
 
 ## 6. CI/CD
 
@@ -230,6 +227,51 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
 - [ ] Once real images are deployed, revisit IAP-in-front-of-`web`/`api` (see item 2's note) — for
       now, all 3 services correctly return 403 to unauthenticated requests since nothing grants
       `allUsers` invoker yet
+- [x] **Found while trying to actually test the deployed app: it couldn't have worked at all.**
+      The 3 Cloud Run services had zero environment configuration — no `DATABASE_URL`, no GCS
+      bucket names, no LLM provider, no Gmail OAuth credentials, nothing (only `image` was set).
+      This predates today — item 6's original verification only checked containers *boot* and
+      pass health checks, never real functional behavior. Also found: the `web`/`api`/`worker`
+      service accounts had **zero** project-level IAM grants at all (no Cloud SQL, Secret Manager,
+      Storage, Pub/Sub, Vertex AI, or BigQuery access), and Pub/Sub could never have successfully
+      pushed to the deployed `worker` — nothing granted the worker's own identity `roles/run.invoker`
+      on itself, which OIDC-authenticated push subscriptions require since the service isn't public.
+      Fixed all of it:
+      - `infra/terraform/modules/data`: new `google_sql_user` + `random_password`, DB password
+        never touches Postgres directly — assembled into a full `DATABASE_URL` and stored as a
+        `google_secret_manager_secret` (Direct VPC Egress + private IP, so this is a plain
+        `postgresql://` URL against the instance's private IP, not the Auth Proxy/`connection_name`
+        pattern)
+      - `infra/terraform/modules/iam`: new grants for `api` (`secretmanager.admin` project-wide —
+        needed since `SecretManagerTokenStore` creates secrets on demand, not a fixed set;
+        `pubsub.publisher`; `aiplatform.user`; `storage.objectAdmin` on both buckets) and `worker`
+        (`secretmanager.secretAccessor`; `aiplatform.user`; `bigquery.dataEditor`;
+        `storage.objectAdmin` on both buckets)
+      - `infra/terraform/modules/compute`: full `env`/secret wiring on `api` and `worker`
+        (`DATABASE_URL`, bucket names, `LLM_PROVIDER=gemini`, Pub/Sub topic names, Gmail OAuth
+        client id/secret, a `random_password`-generated `OAUTH_STATE_SECRET`,
+        `TOKEN_STORE_PROVIDER=secret-manager` — **critical**, since Cloud Run's filesystem doesn't
+        persist across revisions/instances, `local` would silently lose every therapist's Gmail
+        connection — `WEB_APP_URL`); the worker `run.invoker`-on-itself binding; `web` needs no
+        runtime env vars (`NEXT_PUBLIC_API_URL` is already build-time only)
+      - New `gmail_oauth_client_id`/`_client_secret`/`_redirect_uri` tfvars (same OAuth client
+        already created for local dev — just add the deployed API's `/gmail/callback` as a second
+        Authorized redirect URI on it). `GMAIL_OAUTH_REDIRECT_URI` can't be derived from
+        `google_cloud_run_v2_service.api.uri` (a resource can't reference its own computed output)
+        so it's supplied directly — you already have it from `terraform output api_url`
+      - `terraform validate` clean; a real `terraform plan` against the actual dev project reviewed
+        in full — 20 to add, 3 to change (the 3 services picking up their new `env` blocks), all
+        exactly as designed, no surprises
+      - **Known limitation carried forward, not new**: `TEXT_EXTRACTOR=plain` for the deployed
+        worker too (no Document AI processor provisioned) — real PDF uploads get UTF-8-decoded
+        garbage text in the deployed env, same as local dev
+- [ ] **Still needed**: you run `terraform apply` (add the 3 new tfvars first), re-trigger
+      `deploy.yml` so real images with items 4/5's features actually reach Cloud Run (the
+      currently-deployed images predate both), run a one-off `gcloud run jobs execute` schema push
+      against the real Cloud SQL instance (no public IP — nothing outside the VPC can reach it any
+      other way), add the second Authorized redirect URI in Console, then the real smoke test:
+      `gcloud run services proxy`, connect Gmail, upload → tag → transcript → recommendation →
+      draft, confirm a real draft from the *deployed* app this time
 
 ## 7. Compliance (not code, but blocking for real patient data)
 

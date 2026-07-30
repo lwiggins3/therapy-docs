@@ -1,3 +1,10 @@
 project_id       = "therapy-docs-dev"
 region           = "us-central1"
 workspace_domain = "example-clinic.com"
+
+# Reuse the same OAuth 2.0 Client ID (Web application) you created for local dev — just add this
+# environment's api URL + "/gmail/callback" as a second Authorized redirect URI on it in Console.
+# Get the URL from `terraform output api_url` (it already exists after the first apply/deploy).
+gmail_oauth_client_id     = "your-client-id.apps.googleusercontent.com"
+gmail_oauth_client_secret = "your-client-secret"
+gmail_oauth_redirect_uri  = "https://therapy-docs-api-dev-xxxxxxxxxx-uc.a.run.app/gmail/callback"
