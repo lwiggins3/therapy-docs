@@ -122,6 +122,29 @@ revisit alongside that.
       guard at the top of the handler (`if (transcript.status === "ready") return;` — status only
       flips to `ready` after a full successful run, so it doubles as the idempotency signal, no
       dedup table needed). Covered by a new test case in `transcript-ingest.test.ts`.
+- [x] **That guard alone turned out to be insufficient** — found during item 5's real Gmail
+      end-to-end test, which produced 3 `Recommendation` rows for one transcript instead of 1.
+      Root cause: both push subscriptions defaulted to Pub/Sub's 10-second ack deadline, but a
+      real transcript-ingest run (two sequential live LLM calls — embed, then
+      `recommendDocuments`) routinely takes 20-30+ seconds. Pub/Sub redelivers the same message
+      while the first attempt is still in flight, *before* it's ever written `status: "ready"` —
+      so the status-based guard above never even sees a reason to fire, since none of the
+      concurrent/overlapping attempts have finished yet. Fixed at the actual source: both
+      subscriptions now request a 600-second (Pub/Sub's max) ack deadline —
+      `apps/api/src/scripts/setup-pubsub.ts` for local dev (`ackDeadlineSeconds` on create, plus
+      `subscription.setMetadata()` to converge an already-existing subscription), and
+      `ack_deadline_seconds = 600` on both `google_pubsub_subscription` resources in
+      `infra/terraform/modules/compute/main.tf` for real deployments (**needs `terraform apply`**
+      — not applied automatically). Confirmed locally: both subscriptions now report
+      `ackDeadlineSeconds: 600`. This affects `document-ingest` too, though it was invisible there
+      since tag assignments are `upsert`ed (idempotent at the DB level) — only `Recommendation`'s
+      plain `create()` makes the duplication visible.
+- [x] **Real end-to-end Gmail verification, done**: connected Gmail via `/settings`, uploaded a
+      document, confirmed its tags, uploaded a matching transcript, accepted the resulting
+      recommendation, and finalized — a real draft appeared in the therapist's actual Gmail
+      Drafts folder (`gmailDraftId` returned by the real API), with an appropriately warm,
+      correctly-scoped subject/body. Item 5's only remaining checkbox (the manual OAuth client
+      setup) is now complete for local dev.
 - [x] Model id is now a configuration item, not hardcoded: `createLlmClient()` takes an optional
       `model`, passed through to whichever adapter's constructor (both already accepted a `model`
       override — just wasn't wired up to any env var). `apps/worker/src/main.ts` reads it from a
@@ -131,7 +154,7 @@ revisit alongside that.
       back to `claude-vertex` + set `LLM_MODEL` once the real available Claude model id/version is
       confirmed on the project's Model Garden page.
 
-## 5. Therapist review → draft email — DONE (pending manual OAuth client setup)
+## 5. Therapist review → draft email — DONE
 
 This was a from-scratch build, unlike items 1/4 — no OAuth code, no token storage, no
 `EmailDraftsModule` existed at all beforehand.
@@ -170,16 +193,13 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       transcript/patient lookup, the approved-recommendations filter, and a **real** `draftEmail()`
       call against Gemini — before failing at the expected point: `"Therapist has not connected
       Gmail yet"`.
-- [ ] **Not yet verified**: an actual Gmail draft appearing in a real mailbox. Requires a manual,
-      one-time step you'll need to do — create an OAuth 2.0 Client ID (Web application) in Google
-      Cloud Console, reusing the existing Internal/Workspace-restricted consent screen already
-      configured for IAP (`infra/terraform/modules/iam/main.tf`'s note on the IAP brand). Redirect
-      URI must match `GMAIL_OAUTH_REDIRECT_URI`. Paste the Client ID/Secret into
-      `GMAIL_OAUTH_CLIENT_ID`/`GMAIL_OAUTH_CLIENT_SECRET` in `.env`, then connect Gmail via
-      `/settings` and re-run the smoke test above end to end.
 - [ ] Deferred: once `TOKEN_STORE_PROVIDER` flips to `secret-manager` for a real deployment, the
       `api` runtime service account needs a Secret Manager IAM grant (create/add-version/access on
       its own `gmail-token-*` secrets) — no Terraform change needed for local dev.
+- [ ] **`terraform apply` needed**: the `ack_deadline_seconds = 600` fix above is written in
+      Terraform but not yet applied to the real dev environment — the manually-run local Pub/Sub
+      setup script already has it, but real Cloud Run deploys are still on the 10s default until
+      `infra/terraform/environments/dev` is applied.
 
 ## 6. CI/CD
 

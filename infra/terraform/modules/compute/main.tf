@@ -102,6 +102,11 @@ resource "google_pubsub_subscription" "document_ingest" {
   name    = "document-ingest-worker"
   topic   = google_pubsub_topic.document_ingest.name
 
+  # Real LLM calls routinely exceed the 10s default — a shorter deadline than the handler causes
+  # Pub/Sub to redeliver the same message while the first attempt is still in flight, producing
+  # concurrent/overlapping runs (see apps/api/src/scripts/setup-pubsub.ts for the same fix locally).
+  ack_deadline_seconds = 600
+
   push_config {
     push_endpoint = "${google_cloud_run_v2_service.worker.uri}/pubsub/document-ingest"
     oidc_token {
@@ -114,6 +119,8 @@ resource "google_pubsub_subscription" "transcript_ingest" {
   project = var.project_id
   name    = "transcript-ingest-worker"
   topic   = google_pubsub_topic.transcript_ingest.name
+
+  ack_deadline_seconds = 600
 
   push_config {
     push_endpoint = "${google_cloud_run_v2_service.worker.uri}/pubsub/transcript-ingest"
