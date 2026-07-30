@@ -40,7 +40,8 @@ absolute path since `apps/api`/`apps/worker` run from different directories).
       fixed. Needs: provision a real Document AI processor in the GCP project (`DOCUMENT_AI_
       PROCESSOR_ID`), switch `TEXT_EXTRACTOR=document-ai` for `apps/worker` (local and deployed),
       and smoke-test against a real scanned/real PDF end to end — `DocumentAiTextExtractor` is
-      already written but has never been exercised against a live processor.
+      already written but has never been exercised against a live processor. Tracked in
+      [#1](https://github.com/lwiggins3/therapy-docs/issues/1).
 
 ## 2. Real GCP dev environment — DONE (see `docs/runbooks/gcp-dev-setup.md`)
 
@@ -78,7 +79,8 @@ absolute path since `apps/api`/`apps/worker` run from different directories).
 - [x] Vitest added to `apps/api` as part of item 5 (first coverage for this app) —
       `signed-state.test.ts` and `approved-recommendations.test.ts`
 - [ ] `packages/storage` still has no tests — add as its logic gets exercised by upcoming roadmap
-      items, same "test alongside the feature" approach
+      items, same "test alongside the feature" approach. Tracked in
+      [#2](https://github.com/lwiggins3/therapy-docs/issues/2).
 
 ## 4. Transcript → recommendation pipeline — DONE
 
@@ -213,7 +215,8 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       mentioning the documents by title); nothing in `buildRawEmailMessage()` fetches the
       document's bytes from GCS or attaches them as a MIME part. Needs a real multipart/MIME
       message (subject + body + one attachment per approved document, fetched via
-      `StorageClient.download()`) instead of the current single-part text message.
+      `StorageClient.download()`) instead of the current single-part text message. Tracked in
+      [#3](https://github.com/lwiggins3/therapy-docs/issues/3).
 
 ## 6. CI/CD
 
@@ -349,20 +352,24 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
 
 ## 7. Compliance (not code, but blocking for real patient data)
 
-- [ ] Execute the GCP BAA covering every service in `docs/hipaa-compliance.md`
+- [ ] Execute the GCP BAA covering every service in `docs/hipaa-compliance.md`. Tracked in
+      [#4](https://github.com/lwiggins3/therapy-docs/issues/4).
 - [ ] Execute the separate Google Workspace BAA (IAP SSO + Gmail API — see the documented
-      exception in `docs/hipaa-compliance.md`)
+      exception in `docs/hipaa-compliance.md`). Tracked in
+      [#5](https://github.com/lwiggins3/therapy-docs/issues/5).
 
 ## 8. Folder upload (feature request)
 
 - [ ] `apps/web`'s upload form should accept a folder, not just individual files — recursively
       walking all nested subfolders and documents inside it and uploading each one through the
-      existing per-document pipeline (item 1)
+      existing per-document pipeline (item 1). Tracked in
+      [#6](https://github.com/lwiggins3/therapy-docs/issues/6).
 
 ## 9. Delete documents and transcripts (feature request)
 
 Found missing during the real end-to-end browser test (item 6) — there's currently no way to
-remove a library document or a transcript once uploaded, from the UI or the API.
+remove a library document or a transcript once uploaded, from the UI or the API. Tracked in
+[#7](https://github.com/lwiggins3/therapy-docs/issues/7).
 
 - [ ] `apps/api`: `DELETE /documents/:id` (remove the `LibraryDocument` row + its
       `DocumentTagAssignment`/`Recommendation`/`EmailDraftDocument` references, and the underlying
