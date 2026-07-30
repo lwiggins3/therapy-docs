@@ -13,10 +13,15 @@ datasource db {
 }
 
 model Therapist {
-  id            String   @id @default(uuid())
-  email         String   @unique // Google Workspace identity
-  displayName   String
-  createdAt     DateTime @default(now())
+  id              String   @id @default(uuid())
+  email           String   @unique // Google Workspace identity
+  displayName     String
+  createdAt       DateTime @default(now())
+  // Gmail OAuth (gmail.compose scope, draft-only — see docs/hipaa-compliance.md). The refresh
+  // token itself is never stored here — this is a pointer to where it actually lives (a Secret
+  // Manager resource name in prod, a local file key in dev). See apps/api/src/lib/token-store.ts.
+  gmailConnected  Boolean  @default(false)
+  gmailTokenRef   String?
 
   patients      Patient[]
   documents     LibraryDocument[]
@@ -152,6 +157,8 @@ model EmailDraft {
   transcriptId String
   therapistId  String
   gmailDraftId String // never sent programmatically — therapist reviews/sends from their own mailbox
+  subject      String
+  body         String
   createdAt    DateTime @default(now())
 
   patient      Patient    @relation(fields: [patientId], references: [id])

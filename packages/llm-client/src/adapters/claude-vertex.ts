@@ -1,5 +1,6 @@
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import type { DocumentRecommendation, LlmClient, TagSuggestion } from "../types";
+import { buildDraftEmailPrompt, parseDraftEmailResponse } from "../draft-email";
 import { buildRecommendDocumentsPrompt, parseRecommendDocumentsResponse } from "../recommend-documents";
 import { buildSuggestTagsPrompt, parseTagSuggestionsResponse } from "../suggest-tags";
 import { embedWithVertexAi } from "../vertex-embedding";
@@ -63,12 +64,19 @@ export class ClaudeVertexLlmClient implements LlmClient {
     return parseRecommendDocumentsResponse(textBlock.text);
   }
 
-  async draftEmail(_input: {
+  async draftEmail(input: {
     patientDisplayName: string;
     approvedDocuments: { id: string; title: string }[];
   }): Promise<{ subject: string; body: string }> {
-    // TODO: prompt Claude for a warm, brief follow-up email listing the approved documents.
-    // Output is a draft only — apps/api hands the result to the Gmail API drafts.create call.
-    throw new Error("ClaudeVertexLlmClient.draftEmail not yet implemented");
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 1024,
+      messages: [{ role: "user", content: buildDraftEmailPrompt(input) }],
+    });
+    const textBlock = response.content.find((block) => block.type === "text");
+    if (!textBlock || textBlock.type !== "text") {
+      throw new Error("Claude response contained no text block");
+    }
+    return parseDraftEmailResponse(textBlock.text);
   }
 }

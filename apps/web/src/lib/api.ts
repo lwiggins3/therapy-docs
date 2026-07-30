@@ -38,6 +38,15 @@ export interface RecommendationWithDocument {
   document: { id: string; title: string };
 }
 
+export interface EmailDraftWithDocuments {
+  id: string;
+  subject: string;
+  body: string;
+  gmailDraftId: string;
+  createdAt: string;
+  documents: { document: { id: string; title: string } }[];
+}
+
 export async function getDevTherapist(): Promise<DevTherapist> {
   const res = await fetch(`${apiUrl}/dev/therapist`);
   if (!res.ok) {

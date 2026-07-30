@@ -1,5 +1,6 @@
 import { VertexAI } from "@google-cloud/vertexai";
 import type { DocumentRecommendation, LlmClient, TagSuggestion } from "../types";
+import { buildDraftEmailPrompt, parseDraftEmailResponse } from "../draft-email";
 import { buildRecommendDocumentsPrompt, parseRecommendDocumentsResponse } from "../recommend-documents";
 import { buildSuggestTagsPrompt, parseTagSuggestionsResponse } from "../suggest-tags";
 import { embedWithVertexAi } from "../vertex-embedding";
@@ -64,11 +65,19 @@ export class GeminiLlmClient implements LlmClient {
     return parseRecommendDocumentsResponse(text);
   }
 
-  async draftEmail(_input: {
+  async draftEmail(input: {
     patientDisplayName: string;
     approvedDocuments: { id: string; title: string }[];
   }): Promise<{ subject: string; body: string }> {
-    // TODO: prompt Gemini for a draft follow-up email. Draft only — never sent from here.
-    throw new Error("GeminiLlmClient.draftEmail not yet implemented");
+    const model = this.vertexAi.getGenerativeModel({
+      model: this.model,
+      generationConfig: { responseMimeType: "application/json" },
+    });
+    const result = await model.generateContent(buildDraftEmailPrompt(input));
+    const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      throw new Error("Gemini response contained no text");
+    }
+    return parseDraftEmailResponse(text);
   }
 }

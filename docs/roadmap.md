@@ -63,10 +63,12 @@ revisit alongside that.
 - [x] Vitest added to `apps/worker` as part of item 1 (not a separate retrofit pass) —
       `document-ingest.test.ts` and (as of item 4) `transcript-ingest.test.ts` cover both
       pipelines' orchestration
-- [x] Vitest added to `packages/llm-client` as part of item 4 —
-      `recommend-documents.test.ts` covers the response parser
-- [ ] `apps/api`, `packages/storage` still have no tests — add as their logic gets exercised by
-      upcoming roadmap items, same "test alongside the feature" approach
+- [x] Vitest added to `packages/llm-client` as part of item 4 (`recommend-documents.test.ts`) and
+      item 5 (`draft-email.test.ts`) — both cover their response parsers
+- [x] Vitest added to `apps/api` as part of item 5 (first coverage for this app) —
+      `signed-state.test.ts` and `approved-recommendations.test.ts`
+- [ ] `packages/storage` still has no tests — add as its logic gets exercised by upcoming roadmap
+      items, same "test alongside the feature" approach
 
 ## 4. Transcript → recommendation pipeline — DONE
 
@@ -129,12 +131,55 @@ revisit alongside that.
       back to `claude-vertex` + set `LLM_MODEL` once the real available Claude model id/version is
       confirmed on the project's Model Garden page.
 
-## 5. Therapist review → draft email
+## 5. Therapist review → draft email — DONE (pending manual OAuth client setup)
 
-- [ ] `packages/llm-client`'s `draftEmail()` implementation
-- [ ] `apps/api`: `EmailDraftsModule`, Gmail API integration (`gmail.compose` scope, per-therapist
-      OAuth, draft-only — never sends)
-- [ ] `apps/web`: finalize-recommendations action → draft review screen
+This was a from-scratch build, unlike items 1/4 — no OAuth code, no token storage, no
+`EmailDraftsModule` existed at all beforehand.
+
+- [x] `packages/llm-client`: implemented `draftEmail()` for real in both adapters
+      (`draft-email.ts` prompt builder/parser, mirroring `recommend-documents.ts`), with tests.
+- [x] Schema: added `EmailDraft.subject`/`.body` (persists the drafted content so the review
+      screen doesn't need a live Gmail round-trip) and `Therapist.gmailConnected`/`.gmailTokenRef`
+      (a *pointer* to where the refresh token lives — never the token itself in Postgres, per
+      `docs/hipaa-compliance.md`'s BAA table, which already named Secret Manager as the intended
+      store).
+- [x] `apps/api/src/lib/token-store.ts` (new): `TokenStore` interface mirroring the
+      storage/llm-client adapter pattern — `LocalFileTokenStore` (dev default, clearly marked
+      non-compliant) and `SecretManagerTokenStore` (one secret per therapist, real deployments).
+- [x] `apps/api/src/lib/signed-state.ts` (new): HMAC-signed, short-lived OAuth `state` param —
+      there's no real session system yet (every controller trusts a client-supplied
+      `x-therapist-id` header), so this stands in for session-based CSRF protection/attribution,
+      in the same deliberate-stopgap spirit as the `x-therapist-id` dev shim.
+- [x] `apps/api`: new `GmailModule` (`/gmail/auth-url`, `/gmail/callback`, `/gmail/status`) and
+      `EmailDraftsModule` (`POST /email-drafts` finalizes — LLM draft + real Gmail
+      `drafts.create` call + persists `EmailDraft`/`EmailDraftDocument`; `GET /email-drafts`
+      lists). Gmail draft has **no "To" address** — deliberate: `Patient` intentionally stores no
+      email address (data minimization), so the therapist fills in the recipient themselves
+      before sending.
+- [x] `apps/web`: `/settings` (Gmail connect status/button) and a "Finalize & create draft"
+      action on `/transcripts/[id]`, shown once at least one recommendation is
+      accepted/added-by-therapist.
+- [x] First Vitest coverage for `apps/api` (none existed before this): `signed-state.test.ts`
+      (valid/expired/tampered/malformed cases) and `approved-recommendations.test.ts` (extracted
+      the "what counts as approved" predicate out of an inline Prisma filter specifically so it
+      was testable without DB mocking).
+- [x] Verified: `pnpm turbo run lint typecheck test` clean (20 tests across `llm-client`, `api`,
+      `worker`). Local smoke test confirmed the real mechanical path — `/gmail/auth-url` returns a
+      correctly-shaped Google consent URL (scope, signed `state`, redirect URI all correct), and a
+      seeded transcript with an accepted recommendation correctly ran the full `finalize` flow —
+      transcript/patient lookup, the approved-recommendations filter, and a **real** `draftEmail()`
+      call against Gemini — before failing at the expected point: `"Therapist has not connected
+      Gmail yet"`.
+- [ ] **Not yet verified**: an actual Gmail draft appearing in a real mailbox. Requires a manual,
+      one-time step you'll need to do — create an OAuth 2.0 Client ID (Web application) in Google
+      Cloud Console, reusing the existing Internal/Workspace-restricted consent screen already
+      configured for IAP (`infra/terraform/modules/iam/main.tf`'s note on the IAP brand). Redirect
+      URI must match `GMAIL_OAUTH_REDIRECT_URI`. Paste the Client ID/Secret into
+      `GMAIL_OAUTH_CLIENT_ID`/`GMAIL_OAUTH_CLIENT_SECRET` in `.env`, then connect Gmail via
+      `/settings` and re-run the smoke test above end to end.
+- [ ] Deferred: once `TOKEN_STORE_PROVIDER` flips to `secret-manager` for a real deployment, the
+      `api` runtime service account needs a Secret Manager IAM grant (create/add-version/access on
+      its own `gmail-token-*` secrets) — no Terraform change needed for local dev.
 
 ## 6. CI/CD
 
