@@ -96,11 +96,22 @@ revisit alongside that.
       `document-ingest.test.ts`'s structure); real local smoke test confirmed the full mechanical
       pipeline — patient creation, PDF-only upload validation, Pub/Sub delivery to
       `/pubsub/transcript-ingest`, the audit event recorded before the (attempted) LLM call, and
-      correct `failed` status transition. **Not verified**: actual recommendation quality/output —
-      this sandbox's `gcloud` session can't complete the interactive reauth (`invalid_rapt`) real
-      Vertex AI calls need, the same blocker hit earlier trying to `gcloud auth login`. Smoke-test
-      recommendation quality for real once that's resolved (same caveat item 1 originally had
-      before item 2's real GCP access landed).
+      correct `failed` status transition.
+- [x] Fixed a real bug surfaced by the first-ever live-model attempt (previously masked by
+      `invalid_rapt` reauth failures blocking every call before this): `embedWithVertexAi` was
+      reusing the *chat* model's location for the *embedding* model — fine for Gemini's own
+      region, but Claude on Model Garden uses the "us" multi-region, which isn't valid for the
+      `gemini-embedding-001` embedding endpoint (404s). `createLlmClient`/both adapters now take
+      a separate `embeddingLocation`, defaulting to `GCP_REGION` in `apps/worker/src/main.ts`.
+      Affects `document-ingest.ts` too (pre-existing, not new to item 4) — was never caught
+      because this pipeline had never been exercised against a live model before now.
+- [ ] **Still not verified**: actual recommendation quality/output. After fixing the above, real
+      calls now fail with `PERMISSION_DENIED: Spend cap breached for project ... aiplatform.googleapis.com`
+      — a GCP billing spend cap on the project, blocking every Vertex AI call (Claude and Gemini,
+      embeddings and chat). Needs to be raised/removed in the Cloud Billing console before a real
+      recommendation-quality smoke test is possible (same "unverified against a live model" caveat
+      item 1 had before item 2's real GCP access existed, now one layer deeper: auth got fixed,
+      billing is the new blocker).
 
 ## 5. Therapist review → draft email
 

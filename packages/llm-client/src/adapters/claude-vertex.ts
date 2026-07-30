@@ -13,8 +13,9 @@ export class ClaudeVertexLlmClient implements LlmClient {
   private readonly model: string;
   private readonly projectId: string;
   private readonly region: string;
+  private readonly embeddingLocation: string;
 
-  constructor(options: { projectId: string; region: string; model?: string }) {
+  constructor(options: { projectId: string; region: string; model?: string; embeddingLocation?: string }) {
     this.client = new AnthropicVertex({
       projectId: options.projectId,
       region: options.region,
@@ -22,6 +23,7 @@ export class ClaudeVertexLlmClient implements LlmClient {
     this.model = options.model ?? "claude-sonnet-5@20260101";
     this.projectId = options.projectId;
     this.region = options.region;
+    this.embeddingLocation = options.embeddingLocation ?? options.region;
   }
 
   async suggestTags(input: { documentText: string; existingTags: string[] }): Promise<TagSuggestion[]> {
@@ -40,7 +42,9 @@ export class ClaudeVertexLlmClient implements LlmClient {
   async embed(input: { text: string }): Promise<number[]> {
     // Claude has no embeddings endpoint — delegate to the shared Vertex AI embedding model so
     // every adapter returns vectors from the same embedding space regardless of LLM_PROVIDER.
-    return embedWithVertexAi({ projectId: this.projectId, location: this.region }, input.text);
+    // Uses embeddingLocation, not this.region: Claude on Model Garden is served through the "us"
+    // multi-region, but the embedding model needs a real single region (e.g. "us-central1").
+    return embedWithVertexAi({ projectId: this.projectId, location: this.embeddingLocation }, input.text);
   }
 
   async recommendDocuments(input: {

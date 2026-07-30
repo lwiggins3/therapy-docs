@@ -11,18 +11,21 @@ export class GeminiLlmClient implements LlmClient {
   private readonly embeddingModel: string;
   private readonly projectId: string;
   private readonly location: string;
+  private readonly embeddingLocation: string;
 
   constructor(options: {
     projectId: string;
     location: string;
     model?: string;
     embeddingModel?: string;
+    embeddingLocation?: string;
   }) {
     this.vertexAi = new VertexAI({ project: options.projectId, location: options.location });
     this.model = options.model ?? "gemini-2.5-pro";
     this.embeddingModel = options.embeddingModel ?? "gemini-embedding-001";
     this.projectId = options.projectId;
     this.location = options.location;
+    this.embeddingLocation = options.embeddingLocation ?? options.location;
   }
 
   async suggestTags(input: { documentText: string; existingTags: string[] }): Promise<TagSuggestion[]> {
@@ -40,7 +43,7 @@ export class GeminiLlmClient implements LlmClient {
 
   async embed(input: { text: string }): Promise<number[]> {
     return embedWithVertexAi(
-      { projectId: this.projectId, location: this.location, model: this.embeddingModel },
+      { projectId: this.projectId, location: this.embeddingLocation, model: this.embeddingModel },
       input.text,
     );
   }
