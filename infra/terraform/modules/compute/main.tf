@@ -5,6 +5,10 @@ resource "google_artifact_registry_repository" "main" {
   format        = "DOCKER"
 }
 
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 locals {
   # Placeholder image until CI/CD pushes real builds to the Artifact Registry repo above.
   placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello"
@@ -45,9 +49,16 @@ resource "google_secret_manager_secret_version" "gmail_oauth_client_secret" {
 }
 
 resource "google_cloud_run_v2_service" "web" {
+  provider = google-beta # iap_enabled only exists in google-beta as of provider v6.50, not stable google
   project  = var.project_id
   name     = "therapy-docs-web-${var.environment}"
   location = var.region
+
+  # Enables IAP directly on this Cloud Run service — protects the existing *.run.app URL, no
+  # load balancer/Serverless NEG/custom domain/managed cert needed. api/worker stay off IAP:
+  # api is reached only via web's own server-side proxy below, worker only via Pub/Sub OIDC push.
+  iap_enabled = true
+  ingress     = "INGRESS_TRAFFIC_ALL"
 
   template {
     service_account = var.service_account_emails["web"]
@@ -60,6 +71,15 @@ resource "google_cloud_run_v2_service" "web" {
     }
     containers {
       image = local.placeholder_image
+
+      # Server-only — never exposed to the browser bundle (no NEXT_PUBLIC_ prefix). Read by
+      # apps/web/src/app/api-proxy/[...path]/route.ts to mint a real service-to-service ID token
+      # and forward browser requests to api, since a browser fetch() to api's separate origin
+      # would never carry IAP/GCP credentials no matter what protects api.
+      env {
+        name  = "API_URL"
+        value = var.api_url
+      }
     }
   }
 
@@ -324,4 +344,39 @@ resource "google_cloud_run_v2_service_iam_member" "worker_self_invoker" {
   name     = google_cloud_run_v2_service.worker.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${var.service_account_emails["worker"]}"
+}
+
+# --- IAP on web, and web's own server-to-service access to api ---
+
+# Required for IAP itself to function, regardless of who end users are — IAP's own service
+# identity needs permission to invoke the Cloud Run service it's protecting.
+resource "google_cloud_run_v2_service_iam_member" "iap_invoker_web" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.web.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-iap.iam.gserviceaccount.com"
+}
+
+# A browser's fetch() to api's separate origin would never carry IAP/GCP credentials no matter
+# what protects api — so all browser -> api traffic instead goes through web's own server-side
+# proxy (apps/web/src/app/api-proxy), which mints a real service-to-service ID token. This grant
+# lets that identity through; api itself never needs to be reachable directly by a browser.
+resource "google_cloud_run_v2_service_iam_member" "web_can_invoke_api" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.api.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${var.service_account_emails["web"]}"
+}
+
+# Who's actually let through IAP's login gate — a list rather than requiring a pre-existing
+# Google Group, so you can grant yourself access immediately for testing.
+resource "google_cloud_run_v2_service_iam_member" "iap_accessors" {
+  for_each = toset(var.iap_accessor_members)
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.web.name
+  role     = "roles/iap.httpsResourceAccessor"
+  member   = each.value
 }

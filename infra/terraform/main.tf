@@ -46,4 +46,6 @@ module "compute" {
   gmail_oauth_client_id     = var.gmail_oauth_client_id
   gmail_oauth_client_secret = var.gmail_oauth_client_secret
   gmail_oauth_redirect_uri  = var.gmail_oauth_redirect_uri
+  iap_accessor_members      = var.iap_accessor_members
+  api_url                   = var.api_url
 }

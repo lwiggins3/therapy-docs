@@ -23,3 +23,11 @@ variable "gmail_oauth_client_secret" {
 variable "gmail_oauth_redirect_uri" {
   type = string
 }
+
+variable "iap_accessor_members" {
+  type = list(string)
+}
+
+variable "api_url" {
+  type = string
+}

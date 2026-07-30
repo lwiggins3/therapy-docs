@@ -52,11 +52,7 @@ absolute path since `apps/api`/`apps/worker` run from different directories).
       a real Google Workspace organization (the actual domain lives in `terraform.tfvars`'s
       `workspace_domain` — gitignored, not committed).
 
-Deliberately **not done yet**: actually enabling IAP in front of `web`/`api` and granting
-`roles/iap.httpsResourceAccessor` to a Workspace group — still a TODO in
-`infra/terraform/modules/iam/main.tf`. Those Cloud Run services only run the `hello` placeholder
-right now, so there's no urgency locking down access before item 6 (CI/CD) deploys real code —
-revisit alongside that.
+~~Deliberately not done yet: actually enabling IAP in front of `web`/`api`~~ — see item 6, done.
 
 ## 3. Test coverage
 
@@ -224,9 +220,59 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       `apps/api` happened to work only because its own hardcoded default coincidentally matches
       Cloud Run's default. Fixed by having `apps/worker` prefer `PORT`, falling back to
       `WORKER_PORT` for local dev; redeployed clean.
-- [ ] Once real images are deployed, revisit IAP-in-front-of-`web`/`api` (see item 2's note) — for
-      now, all 3 services correctly return 403 to unauthenticated requests since nothing grants
-      `allUsers` invoker yet
+- [x] **IAP in front of `web`, done — plus a real design problem it surfaced.** Testing the
+      deployed app in a browser (via `gcloud run services proxy web`) hit "failed to fetch" on
+      `/settings`: proxying `web` only authenticates *your* connection to `web` — `web`'s own
+      client-side JS then makes a **separate** `fetch()` straight to `api`'s different origin,
+      carrying no credentials at all. This was always going to break the moment `api` required
+      any auth a browser can't satisfy, IAP or otherwise. Fixed properly, not by making `api`
+      public:
+      - Enabled IAP **directly on `web`** (`iap_enabled = true` on
+        `google_cloud_run_v2_service.web`) — no load balancer/Serverless NEG/custom domain/
+        managed cert needed, protects the existing `*.run.app` URL directly. **Only exists in the
+        `google-beta` provider**, not stable `google` (confirmed via `terraform providers schema`
+        after the field was rejected — the same kind of surprise `google_iap_brand`'s July-2025
+        deprecation already produced in this exact area, this time caught before `apply` instead
+        of during it). `api`/`worker` stay off IAP entirely — `api` is never browser-facing at
+        all now (see below), `worker` only accepts Pub/Sub OIDC push, as already documented.
+      - New `apps/web/src/app/api-proxy/[...path]/route.ts`: **every** browser → `api` call now
+        routes through `web`'s own server, which mints a real Cloud Run service-to-service ID
+        token (`google-auth-library`) and forwards the request untouched. `web`'s `apiUrl`
+        constant (`apps/web/src/lib/api.ts`) didn't need to change shape — only what
+        `NEXT_PUBLIC_API_URL` gets built with changed (`deploy.yml`: literal `/api-proxy` instead
+        of querying `api`'s real URL), so no per-page code changes were needed.
+      - **The Gmail OAuth callback got solved for free by the same mechanism**: Google's redirect
+        is browser-mediated (not a server-to-server webhook), so pointing
+        `GMAIL_OAUTH_REDIRECT_URI` at `web`'s own (already IAP-authenticated) origin instead of
+        `api`'s means `api` never needs to be publicly reachable for the callback either — no
+        security tradeoff needed anywhere.
+      - New IAM: the IAP service agent gets `roles/run.invoker` on `web` (required for IAP to
+        function at all), `web`'s own SA gets `roles/run.invoker` on `api` (mirrors the existing
+        `worker_self_invoker` pattern, just cross-service), and a new `iap_accessor_members`
+        list variable (not a hard-required pre-existing Google Group) grants
+        `roles/iap.httpsResourceAccessor` on `web` to whoever's listed.
+      - Hit and fixed a real resource cycle along the way: `web`'s new `API_URL` env
+        (`google_cloud_run_v2_service.api.uri`) and `api`'s existing `WEB_APP_URL` env
+        (`google_cloud_run_v2_service.web.uri`) reference each other's computed output — two
+        different resources depending on each other, not the single-resource self-reference case
+        hit earlier for `GMAIL_OAUTH_REDIRECT_URI`. Same fix: `api_url` is now a supplied tfvars
+        value, not a cross-reference.
+      - `terraform validate` clean, full `terraform plan` reviewed (3 to add, 3 to change, 0
+        destroyed — all exactly as designed); enabled `iap.googleapis.com` directly via `gcloud`
+        (this project enables APIs manually per the existing runbook convention, no
+        `google_project_service` precedent to break).
+      - **Explicitly out of scope, flagged not silently deferred**: this doesn't replace
+        `apps/api/src/dev/dev.controller.ts`'s `x-therapist-id`/seeded-dev-therapist shim with
+        real IAP-asserted-identity → `Therapist` lookup (`docs/data-model.md`'s note that
+        `Therapist` is "keyed by Workspace email, the identity IAP asserts"). IAP now gates *who
+        can reach the app at all* — it doesn't yet make the app therapist-aware per real identity;
+        everyone who gets through still operates as the single seeded dev therapist. Worth its
+        own pass.
+- [ ] **Still needed**: `terraform apply` (add `iap_accessor_members`/`api_url`/the updated
+      `gmail_oauth_redirect_uri` to `terraform.tfvars` first), add the new web-based redirect URI
+      to the OAuth client in Console, push + redeploy, then the real test: visit `web`'s real URL
+      **directly in a browser** (no more `gcloud run services proxy` needed for `web` at all) and
+      run through Connect Gmail → upload → tag → transcript → recommendation → finalize.
 - [x] **Found while trying to actually test the deployed app: it couldn't have worked at all.**
       The 3 Cloud Run services had zero environment configuration — no `DATABASE_URL`, no GCS
       bucket names, no LLM provider, no Gmail OAuth credentials, nothing (only `image` was set).

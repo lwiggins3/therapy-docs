@@ -111,6 +111,9 @@ importers:
       '@therapy-docs/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      google-auth-library:
+        specifier: ^9.15.0
+        version: 9.15.1
       next:
         specifier: ^15.1.0
         version: 15.5.22(@opentelemetry/api@1.9.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

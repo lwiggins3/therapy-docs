@@ -64,7 +64,7 @@ jobs:
 
       - run: |
           docker build -f apps/web/Dockerfile \
-            --build-arg NEXT_PUBLIC_API_URL=${{ needs.deploy-api.outputs.api_url }} \
+            --build-arg NEXT_PUBLIC_API_URL=/api-proxy \
             -t ${{ env.IMAGE_BASE }}/web:${{ github.sha }} .
           docker push ${{ env.IMAGE_BASE }}/web:${{ github.sha }}
 

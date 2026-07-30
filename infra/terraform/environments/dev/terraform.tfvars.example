@@ -3,8 +3,18 @@ region           = "us-central1"
 workspace_domain = "example-clinic.com"
 
 # Reuse the same OAuth 2.0 Client ID (Web application) you created for local dev — just add this
-# environment's api URL + "/gmail/callback" as a second Authorized redirect URI on it in Console.
-# Get the URL from `terraform output api_url` (it already exists after the first apply/deploy).
+# environment's web URL + "/api-proxy/gmail/callback" as a second Authorized redirect URI on it in
+# Console. Get the URL from `terraform output web_url` (it already exists after the first
+# apply/deploy). Note: web's URL, not api's — Google's redirect is browser-mediated, so it must
+# land on web's IAP-authenticated origin, which then proxies it to api server-side.
 gmail_oauth_client_id     = "your-client-id.apps.googleusercontent.com"
 gmail_oauth_client_secret = "your-client-secret"
-gmail_oauth_redirect_uri  = "https://therapy-docs-api-dev-xxxxxxxxxx-uc.a.run.app/gmail/callback"
+gmail_oauth_redirect_uri  = "https://therapy-docs-web-dev-xxxxxxxxxx-uc.a.run.app/api-proxy/gmail/callback"
+
+# Who gets past IAP's login gate on web — your own Workspace email at minimum for testing; add a
+# Google Group (e.g. "group:therapists@example-clinic.com") once you're onboarding real therapists.
+iap_accessor_members = ["user:you@example-clinic.com"]
+
+# api's own URL — get it from `terraform output api_url`. Supplied directly (not referenced) to
+# avoid a resource cycle with api's own WEB_APP_URL, which references web's uri.
+api_url = "https://therapy-docs-api-dev-xxxxxxxxxx-uc.a.run.app"
