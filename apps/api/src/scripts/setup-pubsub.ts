@@ -1,11 +1,11 @@
 import { PubSub, type Topic } from "@google-cloud/pubsub";
 
 /**
- * One-time (idempotent) setup: creates the document-ingest topic and a push subscription
- * targeting apps/worker's /pubsub/document-ingest endpoint. Run via `pnpm --filter
- * @therapy-docs/api pubsub:setup` against either the local emulator (PUBSUB_EMULATOR_HOST set)
- * or real Pub/Sub. Prod equivalent belongs in Terraform once this is deployed — see
- * infra/terraform/modules/compute.
+ * One-time (idempotent) setup: creates the document-ingest and transcript-ingest topics and
+ * their push subscriptions targeting apps/worker's /pubsub/document-ingest and
+ * /pubsub/transcript-ingest endpoints. Run via `pnpm --filter @therapy-docs/api pubsub:setup`
+ * against either the local emulator (PUBSUB_EMULATOR_HOST set) or real Pub/Sub. Prod equivalent
+ * belongs in Terraform once this is deployed — see infra/terraform/modules/compute.
  */
 async function ensureTopic(pubSub: PubSub, topicName: string): Promise<Topic> {
   const topic = pubSub.topic(topicName);
@@ -43,12 +43,20 @@ async function main() {
 
   const pubSub = new PubSub({ projectId });
   const documentIngestTopicName = process.env.PUBSUB_TOPIC_DOCUMENT_INGEST ?? "document-ingest";
+  const transcriptIngestTopicName = process.env.PUBSUB_TOPIC_TRANSCRIPT_INGEST ?? "transcript-ingest";
 
-  const topic = await ensureTopic(pubSub, documentIngestTopicName);
+  const documentTopic = await ensureTopic(pubSub, documentIngestTopicName);
   await ensurePushSubscription(
-    topic,
+    documentTopic,
     `${documentIngestTopicName}-worker`,
     `${workerPushUrl}/pubsub/document-ingest`,
+  );
+
+  const transcriptTopic = await ensureTopic(pubSub, transcriptIngestTopicName);
+  await ensurePushSubscription(
+    transcriptTopic,
+    `${transcriptIngestTopicName}-worker`,
+    `${workerPushUrl}/pubsub/transcript-ingest`,
   );
 }
 

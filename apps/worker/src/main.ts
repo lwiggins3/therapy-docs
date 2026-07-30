@@ -1,4 +1,5 @@
 import express from "express";
+import { AuditLogger } from "@therapy-docs/audit";
 import { db } from "@therapy-docs/db";
 import { createLlmClient, type LlmProvider } from "@therapy-docs/llm-client";
 import {
@@ -8,7 +9,7 @@ import {
 import { createStorageClient, type StorageProvider } from "@therapy-docs/storage";
 import { createTextExtractor, type TextExtractorProvider } from "./lib/text-extraction";
 import { handleDocumentIngest, type DocumentIngestDeps } from "./pipelines/document-ingest";
-import { handleTranscriptIngest } from "./pipelines/transcript-ingest";
+import { handleTranscriptIngest, type TranscriptIngestDeps } from "./pipelines/transcript-ingest";
 
 /**
  * Some Vertex AI SDK clients (observed: @anthropic-ai/vertex-sdk's AnthropicVertex) kick off a
@@ -21,6 +22,7 @@ import { handleTranscriptIngest } from "./pipelines/transcript-ingest";
  * being processed when this fires is marked "failed" on a best-effort basis below.
  */
 let inFlightDocumentId: string | undefined;
+let inFlightTranscriptId: string | undefined;
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled rejection (worker staying alive):", reason);
   if (inFlightDocumentId) {
@@ -28,6 +30,13 @@ process.on("unhandledRejection", (reason) => {
       .update({ where: { id: inFlightDocumentId }, data: { status: "failed" } })
       .catch(() => {
         // best-effort — if this also fails the document just stays "processing"
+      });
+  }
+  if (inFlightTranscriptId) {
+    db.transcript
+      .update({ where: { id: inFlightTranscriptId }, data: { status: "failed" } })
+      .catch(() => {
+        // best-effort — if this also fails the transcript just stays "processing"
       });
   }
 });
@@ -64,6 +73,32 @@ function getDocumentIngestDeps(): DocumentIngestDeps {
   return documentIngestDeps;
 }
 
+let transcriptIngestDeps: TranscriptIngestDeps | undefined;
+
+/** Same lazy-construction rationale as getDocumentIngestDeps above. */
+function getTranscriptIngestDeps(): TranscriptIngestDeps {
+  transcriptIngestDeps ??= {
+    storage: createStorageClient({
+      provider: (process.env.STORAGE_PROVIDER as StorageProvider) ?? "local",
+      bucket: process.env.GCS_TRANSCRIPTS_BUCKET,
+      localDir: process.env.LOCAL_STORAGE_DIR,
+    }),
+    textExtractor: createTextExtractor({
+      provider: (process.env.TEXT_EXTRACTOR as TextExtractorProvider) ?? "plain",
+      projectId: process.env.GCP_PROJECT_ID,
+      location: process.env.GCP_REGION,
+      processorId: process.env.DOCUMENT_AI_PROCESSOR_ID,
+    }),
+    llmClient: createLlmClient({
+      provider: (process.env.LLM_PROVIDER as LlmProvider) ?? "claude-vertex",
+      projectId: process.env.VERTEX_AI_PROJECT ?? process.env.GCP_PROJECT_ID ?? "",
+      location: process.env.VERTEX_AI_LOCATION ?? "us-central1",
+    }),
+    auditLogger: new AuditLogger({ bigqueryDataset: process.env.BIGQUERY_AUDIT_DATASET ?? "audit_logs" }),
+  };
+  return transcriptIngestDeps;
+}
+
 const app = express();
 app.use(express.json());
 
@@ -97,10 +132,14 @@ app.post("/pubsub/document-ingest", async (req, res) => {
 app.post("/pubsub/transcript-ingest", async (req, res) => {
   try {
     const payload = PubSubTranscriptIngestMessageSchema.parse(decodePubSubMessage(req.body));
-    await handleTranscriptIngest(payload);
+    inFlightTranscriptId = payload.transcriptId;
+    await handleTranscriptIngest(payload, getTranscriptIngestDeps());
     res.status(204).send();
   } catch (err) {
+    // Non-2xx tells Pub/Sub to retry per the subscription's retry policy.
     res.status(500).json({ error: (err as Error).message });
+  } finally {
+    inFlightTranscriptId = undefined;
   }
 });
 

@@ -27,6 +27,9 @@ export class DocumentsController {
     if (!file) {
       throw new BadRequestException("Missing file");
     }
+    if (file.mimetype !== "application/pdf") {
+      throw new BadRequestException("Only PDF files are supported");
+    }
     if (!title) {
       throw new BadRequestException("Missing title");
     }

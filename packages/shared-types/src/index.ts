@@ -24,6 +24,15 @@ export const LibraryDocumentSchema = z.object({
 });
 export type LibraryDocument = z.infer<typeof LibraryDocumentSchema>;
 
+export const PatientSchema = z.object({
+  id: z.string().uuid(),
+  therapistId: z.string().uuid(),
+  displayName: z.string().min(1),
+  externalMrn: z.string().optional(),
+  createdAt: z.coerce.date(),
+});
+export type Patient = z.infer<typeof PatientSchema>;
+
 export const TranscriptSchema = z.object({
   id: z.string().uuid(),
   patientId: z.string().uuid(),

@@ -1,5 +1,6 @@
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import type { DocumentRecommendation, LlmClient, TagSuggestion } from "../types";
+import { buildRecommendDocumentsPrompt, parseRecommendDocumentsResponse } from "../recommend-documents";
 import { buildSuggestTagsPrompt, parseTagSuggestionsResponse } from "../suggest-tags";
 import { embedWithVertexAi } from "../vertex-embedding";
 
@@ -42,13 +43,20 @@ export class ClaudeVertexLlmClient implements LlmClient {
     return embedWithVertexAi({ projectId: this.projectId, location: this.region }, input.text);
   }
 
-  async recommendDocuments(_input: {
+  async recommendDocuments(input: {
     transcriptText: string;
     candidateDocuments: { id: string; title: string; summary: string }[];
   }): Promise<DocumentRecommendation[]> {
-    // TODO: prompt Claude with the transcript + candidate summaries (post vector pre-filter),
-    // ask for a ranked, justified subset, parse into DocumentRecommendation[].
-    throw new Error("ClaudeVertexLlmClient.recommendDocuments not yet implemented");
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 1024,
+      messages: [{ role: "user", content: buildRecommendDocumentsPrompt(input) }],
+    });
+    const textBlock = response.content.find((block) => block.type === "text");
+    if (!textBlock || textBlock.type !== "text") {
+      throw new Error("Claude response contained no text block");
+    }
+    return parseRecommendDocumentsResponse(textBlock.text);
   }
 
   async draftEmail(_input: {

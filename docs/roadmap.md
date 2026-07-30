@@ -61,19 +61,46 @@ revisit alongside that.
 ## 3. Test coverage
 
 - [x] Vitest added to `apps/worker` as part of item 1 (not a separate retrofit pass) —
-      `document-ingest.test.ts` covers the pipeline orchestration
-- [ ] `apps/api`, `packages/llm-client`, `packages/storage` still have no tests —
-      add as their logic gets exercised by upcoming roadmap items, same "test alongside the
-      feature" approach
+      `document-ingest.test.ts` and (as of item 4) `transcript-ingest.test.ts` cover both
+      pipelines' orchestration
+- [x] Vitest added to `packages/llm-client` as part of item 4 —
+      `recommend-documents.test.ts` covers the response parser
+- [ ] `apps/api`, `packages/storage` still have no tests — add as their logic gets exercised by
+      upcoming roadmap items, same "test alongside the feature" approach
 
-## 4. Transcript → recommendation pipeline
+## 4. Transcript → recommendation pipeline — DONE
 
-- [ ] Depends on (1) — needs a populated, tagged document library to recommend against
-- [ ] `apps/api`: `TranscriptsModule`, `RecommendationsModule`
-- [ ] `apps/worker`: implement `handleTranscriptIngest` for real (extract → embed → pgvector
-      pre-filter → `recommendDocuments()` → persist `Recommendation` rows)
-- [ ] `apps/web`: transcript upload + recommendation review screen (accept/reject/add,
-      per patient/transcript)
+- [x] `packages/db`: added `Transcript.mimeType` (schema already had `Patient`/`Transcript`/
+      `Recommendation` from earlier scaffolding — text extraction dispatch needed a mimeType
+      field, mirroring `LibraryDocument`)
+- [x] `packages/llm-client`: implemented `recommendDocuments()` for real in both adapters
+      (`recommend-documents.ts` prompt builder/parser, mirroring `suggest-tags.ts`) — first Vitest
+      coverage for this package (roadmap item 3 flagged it as untested; this is that moment)
+- [x] **PDF-only for now**: both document and transcript uploads are restricted to
+      `application/pdf` (client `accept` + server-side `BadRequestException` on any other
+      mimetype) — docx/other formats are explicit future work once this moves toward production
+- [x] `apps/api`: added the missing `PatientsModule` (nothing created `Patient` rows before this),
+      `TranscriptsModule` (upload → `transcripts` bucket → publish to `transcript-ingest`), and
+      `RecommendationsModule` (list/accept/reject/manually-add)
+- [x] `apps/worker`: implemented `handleTranscriptIngest` for real — audit-logs
+      `transcript.llm_process` before any LLM call, extracts text, embeds it, pgvector-prefilters
+      the top-20 `LibraryDocument`s by cosine distance scoped to the same therapist, calls
+      `recommendDocuments()`, persists `suggested` `Recommendation` rows. Extracted the
+      `toPgVectorLiteral` helper (was duplicated) into `src/lib/pgvector.ts`, shared with
+      `document-ingest.ts`
+- [x] `apps/web`: `/patients` (list + add), `/transcripts/upload` (patient picker + PDF file
+      input), `/transcripts` (list) and `/transcripts/[id]` (recommendation review —
+      accept/reject/manually add a document)
+- [x] Verified: `pnpm turbo run lint typecheck test` clean across all touched
+      packages/apps (8 tests, including a new `transcript-ingest.test.ts` mirroring
+      `document-ingest.test.ts`'s structure); real local smoke test confirmed the full mechanical
+      pipeline — patient creation, PDF-only upload validation, Pub/Sub delivery to
+      `/pubsub/transcript-ingest`, the audit event recorded before the (attempted) LLM call, and
+      correct `failed` status transition. **Not verified**: actual recommendation quality/output —
+      this sandbox's `gcloud` session can't complete the interactive reauth (`invalid_rapt`) real
+      Vertex AI calls need, the same blocker hit earlier trying to `gcloud auth login`. Smoke-test
+      recommendation quality for real once that's resolved (same caveat item 1 originally had
+      before item 2's real GCP access landed).
 
 ## 5. Therapist review → draft email
 

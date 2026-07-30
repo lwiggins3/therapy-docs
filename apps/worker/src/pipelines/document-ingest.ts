@@ -2,17 +2,13 @@ import { db } from "@therapy-docs/db";
 import type { LlmClient } from "@therapy-docs/llm-client";
 import type { PubSubDocumentIngestMessage } from "@therapy-docs/shared-types";
 import type { StorageClient } from "@therapy-docs/storage";
+import { toPgVectorLiteral } from "../lib/pgvector";
 import type { TextExtractor } from "../lib/text-extraction";
 
 export interface DocumentIngestDeps {
   storage: StorageClient;
   textExtractor: TextExtractor;
   llmClient: LlmClient;
-}
-
-/** pgvector's text input format for a vector literal: `[1,2,3]`. */
-function toPgVectorLiteral(values: number[]): string {
-  return `[${values.join(",")}]`;
 }
 
 /**

@@ -104,6 +104,7 @@ model Transcript {
   patientId    String
   therapistId  String
   gcsUri       String
+  mimeType     String
   status       ProcessingStatus @default(processing)
   sessionDate  DateTime?
   embedding    Unsupported("vector(1536)")?

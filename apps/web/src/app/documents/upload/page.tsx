@@ -60,6 +60,7 @@ export default function UploadPage() {
             <br />
             <input
               type="file"
+              accept="application/pdf"
               onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null)}
               required
             />
