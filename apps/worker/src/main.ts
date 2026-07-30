@@ -70,6 +70,7 @@ function getDocumentIngestDeps(): DocumentIngestDeps {
       location: process.env.VERTEX_AI_LOCATION ?? "us-central1",
       // The embedding model needs a real single region, unlike Claude's "us" multi-region above.
       embeddingLocation: process.env.GCP_REGION ?? "us-central1",
+      model: process.env.LLM_MODEL || undefined,
     }),
   };
   return documentIngestDeps;
@@ -97,6 +98,7 @@ function getTranscriptIngestDeps(): TranscriptIngestDeps {
       location: process.env.VERTEX_AI_LOCATION ?? "us-central1",
       // The embedding model needs a real single region, unlike Claude's "us" multi-region above.
       embeddingLocation: process.env.GCP_REGION ?? "us-central1",
+      model: process.env.LLM_MODEL || undefined,
     }),
     auditLogger: new AuditLogger({ bigqueryDataset: process.env.BIGQUERY_AUDIT_DATASET ?? "audit_logs" }),
   };

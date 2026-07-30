@@ -120,11 +120,14 @@ revisit alongside that.
       guard at the top of the handler (`if (transcript.status === "ready") return;` — status only
       flips to `ready` after a full successful run, so it doubles as the idempotency signal, no
       dedup table needed). Covered by a new test case in `transcript-ingest.test.ts`.
-- [ ] **Claude on Model Garden specifically still unverified**: the hardcoded default model id
-      (`claude-sonnet-5@20260101` in `ClaudeVertexLlmClient`) 404s in this project — not deployed/
-      enabled at that path in this project's Model Garden. Verified the pipeline itself is correct
-      using `LLM_PROVIDER=gemini` instead. Check the project's Model Garden page for the actual
-      available Claude model id/version before relying on the `claude-vertex` provider for real.
+- [x] Model id is now a configuration item, not hardcoded: `createLlmClient()` takes an optional
+      `model`, passed through to whichever adapter's constructor (both already accepted a `model`
+      override — just wasn't wired up to any env var). `apps/worker/src/main.ts` reads it from a
+      new `LLM_MODEL` env var (empty = each adapter's own hardcoded default). Set `LLM_PROVIDER=
+      gemini` as the default in `.env`/`.env.example` for now, since Claude's hardcoded default
+      model id 404s in this project (not deployed/enabled at that path in Model Garden). Switch
+      back to `claude-vertex` + set `LLM_MODEL` once the real available Claude model id/version is
+      confirmed on the project's Model Garden page.
 
 ## 5. Therapist review → draft email
 

@@ -24,6 +24,13 @@ export function createLlmClient(options: {
    * "us" multi-region as `location` must pass this separately (see apps/worker/src/main.ts).
    */
   embeddingLocation?: string;
+  /**
+   * Chat model id/version, e.g. "claude-sonnet-5@20260101" or "gemini-2.5-pro". Model Garden
+   * availability is project- and time-specific (see each project's Model Garden page) — never
+   * hardcode a default callers rely on. Falls back to each adapter's own hardcoded default only
+   * when omitted, for local/test convenience.
+   */
+  model?: string;
 }): LlmClient {
   const embeddingLocation = options.embeddingLocation ?? options.location;
   switch (options.provider) {
@@ -32,12 +39,14 @@ export function createLlmClient(options: {
         projectId: options.projectId,
         region: options.location,
         embeddingLocation,
+        model: options.model,
       });
     case "gemini":
       return new GeminiLlmClient({
         projectId: options.projectId,
         location: options.location,
         embeddingLocation,
+        model: options.model,
       });
     default:
       throw new Error(`Unknown LLM provider: ${options.provider satisfies never}`);
