@@ -88,6 +88,19 @@ resource "google_cloud_run_v2_service" "api" {
     containers {
       image = local.placeholder_image
 
+      # Cloud Run's 512Mi default was getting OOM-killed before the container could bind to
+      # PORT (524Mi used) — the googleapis dependency (Gmail integration, item 5) is large enough
+      # to push NestJS's startup memory past it. worker/web haven't shown the same issue.
+      # cpu/cpu_idle kept at the existing defaults — only bumping memory, not touching billing-
+      # relevant CPU allocation behavior.
+      resources {
+        cpu_idle = true
+        limits = {
+          cpu    = "1000m"
+          memory = "1Gi"
+        }
+      }
+
       env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
