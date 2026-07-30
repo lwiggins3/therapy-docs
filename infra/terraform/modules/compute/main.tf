@@ -372,11 +372,15 @@ resource "google_cloud_run_v2_service_iam_member" "web_can_invoke_api" {
 
 # Who's actually let through IAP's login gate — a list rather than requiring a pre-existing
 # Google Group, so you can grant yourself access immediately for testing.
-resource "google_cloud_run_v2_service_iam_member" "iap_accessors" {
-  for_each = toset(var.iap_accessor_members)
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.web.name
-  role     = "roles/iap.httpsResourceAccessor"
-  member   = each.value
+# roles/iap.httpsResourceAccessor lives on IAP's OWN IAM policy for the protected resource, not
+# Cloud Run's — google_cloud_run_v2_service_iam_member rejects it ("not supported for this
+# resource"); this dedicated resource type (only in google-beta, same as iap_enabled) is required.
+resource "google_iap_web_cloud_run_service_iam_member" "iap_accessors" {
+  provider               = google-beta
+  for_each               = toset(var.iap_accessor_members)
+  project                = var.project_id
+  location               = var.region
+  cloud_run_service_name = google_cloud_run_v2_service.web.name
+  role                   = "roles/iap.httpsResourceAccessor"
+  member                 = each.value
 }
