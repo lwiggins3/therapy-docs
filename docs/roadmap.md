@@ -65,8 +65,20 @@ absolute path since `apps/api`/`apps/worker` run from different directories).
             `POST /documents`, worker picked it up off the real Pub/Sub emulator, document landed
             `status: "ready"` (not `failed`) with sensible LLM-suggested tags (`compassion`,
             `fatigue`, `Self-Care`, `Coping Skills`, `Behavioral Strategies`) — confirms Document AI
-            is extracting real text instead of the old UTF-8-garbage-from-`plain` behavior. Not yet
-            smoke-tested against the *deployed* worker. #1 still open — close once you've confirmed.
+            is extracting real text instead of the old UTF-8-garbage-from-`plain` behavior.
+      - [x] **Smoke-tested against the deployed worker — confirmed, #1 closed.** Terraform state
+            already had the processor/IAM grant applied (`terraform plan` showed 0 to add, only
+            the pre-existing unrelated scaling-block drift); the actual gap was that
+            `apps/worker`'s `DOCUMENT_AI_LOCATION` fix (this same commit) hadn't been deployed yet
+            — last successful deploy predated it. Re-ran `deploy.yml` (`workflow_dispatch`) to
+            rebuild/redeploy all three services. Signed in through IAP as
+            `larry@agere-solutions.com`, uploaded the same `100_compassion_fatigue.pdf` through the
+            real `/documents/upload` form: landed `status: "ready"` with sensible tags
+            (`Compassion Fatigue`, `Caregiver Support`, `Self-Compassion`, `Burnout`, `anxiety`).
+            For direct comparison, an older document uploaded before this fix
+            (`ADHD Relationships`) still sits in the library with exactly the pre-fix garbage
+            tags (`Unreadable Content`, `Corrupted File`, `Technical Issue`), visible side by side
+            in the same document list.
 
 ## 2. Real GCP dev environment — DONE (see `docs/runbooks/gcp-dev-setup.md`)
 
