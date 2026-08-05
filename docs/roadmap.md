@@ -552,3 +552,126 @@ zero design system before this — plain semantic HTML, no CSS framework, no sha
       browser** against the real local stack — clicked through every page (nav links, document
       upload, tag confirm/reject, patient add, transcript upload, settings) and confirmed
       consistent styling with no functional regressions.
+
+## 12. Upload UX + live status updates (feature request) — DONE
+
+Folder upload required a second manual click on "Upload N PDFs" after selecting files, which
+wasn't obvious. Separately, none of `/documents`, `/transcripts`, or `/transcripts/[id]` updated
+once a document/transcript finished processing in the background — the therapist had to manually
+refresh to see tags or recommendations appear.
+
+- [x] **Bug fix**: `titleFromFile` (`apps/web/src/app/documents/upload/page.tsx`) derived the
+      document title from `file.webkitRelativePath`, so folder uploads got titles like
+      `subfolder/My Doc` instead of `My Doc`. Now always titles from the bare `file.name`.
+- [x] Folder upload now starts automatically the moment files are selected —
+      `uploadItems(items)` (renamed/refactored from `uploadFolder()`) takes an explicit array and
+      is called right from `handleFolderSelect`, avoiding a stale-closure read of React state.
+      The manual "Upload N pending PDFs" button still exists, now only shown when there's
+      something left to (re)try — e.g. `therapistId` not yet loaded at selection time.
+- [x] Added a poll-while-processing effect (recursive `setTimeout`, 3s, self-cancels once nothing
+      is left `processing`) to `/documents`, `/transcripts`, and `/transcripts/[id]` — the latter
+      re-fetches both the transcript and its recommendations, which is what makes suggested
+      documents (and, per item 16, the summary) appear without a refresh.
+- [x] **Verified against the real local stack.** In a real browser: selected a single PDF via the
+      folder input — upload started immediately with no button click, landed titled
+      `100_compassion_fatigue` (bare filename, confirmed via `GET /documents`). Uploaded a real
+      transcript via the API mid-flight and watched `/transcripts/[id]` show `processing` live;
+      confirmed via the API afterward that the page's next poll would have picked up the
+      completed summary/recommendations (a mid-session browser-extension disconnect interrupted
+      watching the live re-render itself, unrelated to this app).
+
+## 13. Patient email (feature request) — DONE
+
+`Patient` previously stored no email (see item 5's "no 'To' address" note and
+`docs/hipaa-compliance.md`'s data-minimization section) — a deliberate choice at the time. On
+request, reversed: **confirmed with the user**, including updating both docs to reflect it as a
+deliberate product decision rather than a silent walk-back.
+
+- [x] `packages/db`: `Patient.email String?` (optional, mirrors the existing `externalMrn`
+      pattern). `packages/shared-types`: `PatientSchema` gains `email: z.string().email().optional()`.
+- [x] `apps/api`: `PatientsController`/`PatientsService` accept and persist `email`; format
+      validated via a new extracted `isValidEmail()` (`apps/api/src/patients/is-valid-email.ts`,
+      same "extract pure logic for testability" pattern as `approved-recommendations.ts`).
+- [x] `apps/api/src/email-drafts/email-drafts.service.ts`: `buildRawEmailMessage` gains an
+      optional `to`, passed to `MailComposer`; `finalize()` passes `transcript.patient.email`
+      through when set. Still blank (manual entry) when the patient has none on file.
+- [x] `apps/web/src/app/patients/page.tsx`: "Email (optional)" input on the add-patient form;
+      shown in the patient list.
+- [x] `docs/hipaa-compliance.md`'s Data minimization section updated to document the field as a
+      narrow, deliberate exception (prefill only, never sent automatically, therapist still
+      reviews/sends from their own Gmail) rather than removing the minimization stance entirely.
+- [x] New tests: `email-drafts.service.test.ts` (To header present/absent), `is-valid-email.test.ts`,
+      `patients.service.test.ts` (email persists, defaults to null when omitted).
+- [x] **Verified against the real local stack.** Added a real patient with an email through the
+      browser, confirmed it displayed in the list; added a recommendation and finalized a draft —
+      fetched the resulting real Gmail draft back via `gmail.users.drafts.get` and confirmed its
+      `To` header was populated with the patient's email.
+- [x] **Regression found and fixed along the way**: deleting a document that had ever had a tag
+      confirmed/rejected (item 10's `TagSuggestionFeedback` log) 500'd with a Postgres foreign-key
+      violation — `DocumentsService.deleteDocument()`'s transaction never cleaned up
+      `TagSuggestionFeedback` rows before deleting the `LibraryDocument` row. Fixed by adding that
+      delete to the transaction; covered by a new assertion in the existing
+      `documents.service.test.ts` delete test (seeds a feedback row, asserts it's gone after
+      delete) and confirmed against the real stack (the exact 500 reproduced, then resolved).
+
+## 14. Bulk tag actions (feature request) — DONE
+
+Manual tag-add only accepted one label at a time; there was no way to confirm/reject every
+suggested tag on a document at once. Entirely frontend — `PATCH /documents/:id/tags` already
+looped over array inputs (`DocumentsService.updateTags`), so no backend change was needed.
+
+- [x] `apps/web/src/app/documents/page.tsx`: the "Add tag" input now splits on `/[,\s]+/`
+      (comma or whitespace separated), dedupes, and submits the full array as `addLabels` in one
+      request.
+- [x] Per-document "Confirm all" / "Reject all" buttons, shown when a document has more than one
+      unconfirmed tag — one `updateTags()` call each with every unconfirmed tag id.
+- [x] **Verified against the real local stack** in a real browser: submitted `"TestTagA,
+      TestTagB TestTagC"` in one go and confirmed all three were added; used "Confirm all" on a
+      document with 5 suggested tags and confirmed all flipped to confirmed in one click.
+
+## 15. Filter document library by tag (feature request) — DONE
+
+Also `apps/web/src/app/documents/page.tsx`, also frontend-only — reuses the existing `GET /tags`
+endpoint (`apps/api/src/documents/tags.controller.ts`), which the web app hadn't called before.
+
+- [x] Fetches tags alongside documents; a `<select>` above the list filters the rendered document
+      list client-side by tag label.
+- [x] **Verified against the real local stack**: seeded a second document with a unique manual
+      tag, confirmed selecting that tag in the filter excluded the unrelated document and showed
+      only the matching one.
+
+## 16. Transcript summary (feature request) — DONE
+
+New LLM capability — previously there was no summary/recap of a session transcript anywhere;
+clicking into a transcript only showed the recommendation list. Mirrors the existing
+`suggestTags`/`recommendDocuments`/`draftEmail` pattern exactly.
+
+- [x] `packages/llm-client/src/summarize-transcript.ts` (new): `buildSummarizeTranscriptPrompt`
+      (short factual 2-4 sentence recap, explicitly no clinical advice/interpretation) +
+      `parseSummarizeTranscriptResponse` (`{"summary": string}` JSON, same code-fence tolerance as
+      the other three parsers). `LlmClient.summarizeTranscript` added to both adapters.
+- [x] `packages/db`: `Transcript.summary String?`.
+- [x] `apps/worker/src/pipelines/transcript-ingest.ts`: calls `summarizeTranscript()` right after
+      text extraction, stores the result alongside `status: "ready"`.
+- [x] `apps/web`: `TranscriptWithPatient` gains `summary`; `/transcripts/[id]` shows it in a
+      "Session summary" card once present (picked up automatically by item 12's polling once the
+      worker finishes — no page-specific wiring needed beyond the type).
+- [x] New `summarize-transcript.test.ts`; updated both worker pipeline test files' `StubLlmClient`
+      (`document-ingest.test.ts` throws "not used", `transcript-ingest.test.ts` returns a fixed
+      string, asserted against in the happy-path test).
+- [x] **Verified against the real local stack with a live model.** Uploaded a real transcript PDF
+      through the API; the worker's real `summarizeTranscript()` call against Gemini produced an
+      accurate, transcript-grounded recap ("a recurring conflict pattern with her partner...
+      pursuit-withdraw cycle... practiced naming her feelings... 'I feel' statement..."), stored
+      and returned via `GET /transcripts/:id`.
+
+## 17. Sort/filter transcripts by date and patient (feature request) — DONE
+
+`apps/web/src/app/transcripts/page.tsx`, frontend-only — same client-side pattern as item 15,
+`GET /transcripts` already returns everything needed.
+
+- [x] Sort control (date newest/oldest, patient A→Z) and patient/date filters, all applied
+      client-side to the loaded transcript list.
+- [x] **Verified against the real local stack**: confirmed the patient filter narrows the list to
+      just the matching patient's transcripts; sort/date controls render and are wired to the
+      same `visibleTranscripts` derivation.

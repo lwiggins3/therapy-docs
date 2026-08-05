@@ -26,6 +26,7 @@ export interface TranscriptWithPatient {
   patientId: string;
   status: "processing" | "ready" | "failed";
   sessionDate: string | null;
+  summary: string | null;
   createdAt: string;
   patient: Patient;
 }

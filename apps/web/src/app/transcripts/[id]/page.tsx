@@ -25,6 +25,13 @@ export default function TranscriptReviewPage() {
   const [finalizing, setFinalizing] = useState(false);
   const [error, setError] = useState("");
 
+  const loadTranscript = useCallback(async () => {
+    const res = await fetch(`${apiUrl}/transcripts/${transcriptId}`);
+    if (res.ok) {
+      setTranscript((await res.json()) as TranscriptWithPatient);
+    }
+  }, [transcriptId]);
+
   const loadRecommendations = useCallback(async () => {
     const res = await fetch(`${apiUrl}/recommendations?transcriptId=${transcriptId}`);
     if (res.ok) {
@@ -44,21 +51,26 @@ export default function TranscriptReviewPage() {
       .then(async (therapist) => {
         setTherapistId(therapist.id);
 
-        const [transcriptRes, documentsRes] = await Promise.all([
-          fetch(`${apiUrl}/transcripts/${transcriptId}`),
-          fetch(`${apiUrl}/documents`, { headers: { "x-therapist-id": therapist.id } }),
-        ]);
-        if (transcriptRes.ok) {
-          setTranscript((await transcriptRes.json()) as TranscriptWithPatient);
-        }
+        const documentsRes = await fetch(`${apiUrl}/documents`, { headers: { "x-therapist-id": therapist.id } });
         if (documentsRes.ok) {
           setLibraryDocuments((await documentsRes.json()) as LibraryDocument[]);
         }
+        await loadTranscript();
         await loadRecommendations();
         await loadEmailDrafts();
       })
       .catch((err) => setError((err as Error).message));
-  }, [transcriptId, loadRecommendations, loadEmailDrafts]);
+  }, [transcriptId, loadTranscript, loadRecommendations, loadEmailDrafts]);
+
+  useEffect(() => {
+    if (!therapistId) return;
+    if (transcript?.status !== "processing") return;
+    const timeout = setTimeout(() => {
+      void loadTranscript();
+      void loadRecommendations();
+    }, 3000);
+    return () => clearTimeout(timeout);
+  }, [therapistId, transcript, loadTranscript, loadRecommendations]);
 
   async function decide(recommendationId: string, status: "accepted" | "rejected") {
     if (!therapistId) return;
@@ -117,6 +129,13 @@ export default function TranscriptReviewPage() {
         )}
         {error && <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700">Error: {error}</p>}
       </div>
+
+      {transcript?.summary && (
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">Session summary</h2>
+          <p className="mt-2 text-sm text-gray-600">{transcript.summary}</p>
+        </div>
+      )}
 
       <ul className="flex flex-col gap-3">
         {recommendations.map((recommendation) => (

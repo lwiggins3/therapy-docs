@@ -15,8 +15,7 @@ interface FolderUploadItem {
 }
 
 function titleFromFile(file: File): string {
-  const relativePath = file.webkitRelativePath || file.name;
-  return relativePath.replace(/\.pdf$/i, "");
+  return file.name.replace(/\.pdf$/i, "");
 }
 
 export default function UploadPage() {
@@ -65,29 +64,18 @@ export default function UploadPage() {
     }
   }
 
-  function handleFolderSelect(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    setFolderItems(
-      files.map((selected) => ({
-        path: selected.webkitRelativePath || selected.name,
-        file: selected,
-        status: selected.type === "application/pdf" ? "pending" : "skipped",
-      })),
-    );
-  }
-
-  async function uploadFolder() {
+  async function uploadItems(items: FolderUploadItem[]) {
     if (!therapistId) return;
     setFolderUploading(true);
 
-    for (let i = 0; i < folderItems.length; i++) {
-      if (folderItems[i]!.status !== "pending") continue;
+    for (const item of items) {
+      if (item.status !== "pending") continue;
 
-      setFolderItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "uploading" } : item)));
+      setFolderItems((prev) => prev.map((i) => (i.path === item.path ? { ...i, status: "uploading" } : i)));
 
       const formData = new FormData();
-      formData.append("title", titleFromFile(folderItems[i]!.file));
-      formData.append("file", folderItems[i]!.file);
+      formData.append("title", titleFromFile(item.file));
+      formData.append("file", item.file);
 
       try {
         const res = await fetch(`${apiUrl}/documents`, {
@@ -96,18 +84,31 @@ export default function UploadPage() {
           body: formData,
         });
         setFolderItems((prev) =>
-          prev.map((item, idx) =>
-            idx === i ? { ...item, status: res.ok ? "done" : "failed", error: res.ok ? undefined : `HTTP ${res.status}` } : item,
+          prev.map((i) =>
+            i.path === item.path
+              ? { ...i, status: res.ok ? "done" : "failed", error: res.ok ? undefined : `HTTP ${res.status}` }
+              : i,
           ),
         );
       } catch (err) {
         setFolderItems((prev) =>
-          prev.map((item, idx) => (idx === i ? { ...item, status: "failed", error: (err as Error).message } : item)),
+          prev.map((i) => (i.path === item.path ? { ...i, status: "failed", error: (err as Error).message } : i)),
         );
       }
     }
 
     setFolderUploading(false);
+  }
+
+  function handleFolderSelect(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    const items: FolderUploadItem[] = files.map((selected) => ({
+      path: selected.webkitRelativePath || selected.name,
+      file: selected,
+      status: selected.type === "application/pdf" ? "pending" : "skipped",
+    }));
+    setFolderItems(items);
+    void uploadItems(items);
   }
 
   const pendingCount = folderItems.filter((item) => item.status === "pending").length;
@@ -150,19 +151,23 @@ export default function UploadPage() {
       <div className="flex flex-col gap-4 border-t border-gray-200 pt-6">
         <h2 className="text-lg font-semibold text-gray-900">Upload a folder</h2>
         <p className="text-sm text-gray-600">
-          Recursively uploads every PDF found in the selected folder and its subfolders (each titled after its
-          filename); non-PDF files are skipped.
+          Recursively uploads every PDF found in the selected folder and its subfolders as soon as you select it
+          (each titled after its filename); non-PDF files are skipped.
         </p>
         <input type="file" ref={folderInputRef} multiple onChange={handleFolderSelect} className="text-sm" />
         {folderItems.length > 0 && (
           <>
-            <button
-              onClick={() => void uploadFolder()}
-              disabled={folderUploading || pendingCount === 0 || !therapistId}
-              className="w-fit rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {folderUploading ? "Uploading..." : `Upload ${pendingCount} PDF${pendingCount === 1 ? "" : "s"}`}
-            </button>
+            {pendingCount > 0 && (
+              <button
+                onClick={() => void uploadItems(folderItems)}
+                disabled={folderUploading || !therapistId}
+                className="w-fit rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {folderUploading
+                  ? "Uploading..."
+                  : `Upload ${pendingCount} pending PDF${pendingCount === 1 ? "" : "s"}`}
+              </button>
+            )}
             <ul className="flex flex-col gap-2">
               {folderItems.map((item) => (
                 <li key={item.path} className="flex items-center gap-2 text-sm text-gray-700">

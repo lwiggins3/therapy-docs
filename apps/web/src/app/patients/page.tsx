@@ -9,6 +9,7 @@ export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [displayName, setDisplayName] = useState("");
   const [externalMrn, setExternalMrn] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
 
   const loadPatients = useCallback(async (id: string) => {
@@ -34,12 +35,13 @@ export default function PatientsPage() {
     const res = await fetch(`${apiUrl}/patients`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-therapist-id": therapistId },
-      body: JSON.stringify({ displayName, externalMrn: externalMrn || undefined }),
+      body: JSON.stringify({ displayName, externalMrn: externalMrn || undefined, email: email || undefined }),
     });
 
     if (res.ok) {
       setDisplayName("");
       setExternalMrn("");
+      setEmail("");
       await loadPatients(therapistId);
     } else {
       setError(`Failed to add patient (${res.status})`);
@@ -56,6 +58,7 @@ export default function PatientsPage() {
             <li key={patient.id} className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900">
               {patient.displayName}
               {patient.externalMrn ? ` (${patient.externalMrn})` : ""}
+              {patient.email && <span className="text-gray-500"> — {patient.email}</span>}
             </li>
           ))}
         </ul>
@@ -78,6 +81,15 @@ export default function PatientsPage() {
             <input
               value={externalMrn}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setExternalMrn(e.target.value)}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+            Email (optional — prefills the follow-up draft's recipient)
+            <input
+              type="email"
+              value={email}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
               className="rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
           </label>
