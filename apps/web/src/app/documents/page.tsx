@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import Link from "next/link";
+import { StatusBadge } from "../../components/StatusBadge";
 import { apiUrl, getDevTherapist, type LibraryDocument } from "../../lib/api";
 
 interface UpdateTagsBody {
@@ -55,32 +56,48 @@ export default function DocumentsPage() {
   }
 
   return (
-    <main>
-      <h1>Document library</h1>
-      <p>
-        <Link href="/documents/upload">Upload a document</Link>
-      </p>
-      {error && <p>Error: {error}</p>}
-      <ul>
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-900">Document library</h1>
+        <Link href="/documents/upload" className="text-sm font-medium text-indigo-600 hover:underline">
+          Upload a document
+        </Link>
+      </div>
+      {error && <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700">Error: {error}</p>}
+      <ul className="flex flex-col gap-4">
         {documents.map((doc) => (
-          <li key={doc.id} style={{ marginBottom: "1.5rem" }}>
-            <strong>{doc.title}</strong> — {doc.status}{" "}
-            <button onClick={() => deleteDocument(doc.id, doc.title)}>Delete</button>
-            <ul>
+          <li key={doc.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <strong className="text-gray-900">{doc.title}</strong>
+                <StatusBadge status={doc.status} />
+              </div>
+              <button
+                onClick={() => deleteDocument(doc.id, doc.title)}
+                className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+              >
+                Delete
+              </button>
+            </div>
+            <ul className="mt-3 flex flex-col gap-1.5">
               {doc.tags.map((assignment) => (
-                <li key={assignment.tag.id}>
-                  {assignment.tag.label} ({assignment.source}
-                  {assignment.confirmed ? "" : ", unconfirmed"})
+                <li key={assignment.tag.id} className="flex items-center gap-2 text-sm text-gray-700">
+                  <span className="rounded-full bg-gray-100 px-2.5 py-0.5">{assignment.tag.label}</span>
+                  <span className="text-gray-500">
+                    {assignment.source}
+                    {assignment.confirmed ? "" : ", unconfirmed"}
+                  </span>
                   {!assignment.confirmed && (
                     <>
-                      {" "}
                       <button
                         onClick={() => updateTags(doc.id, { confirmTagIds: [assignment.tag.id] })}
+                        className="rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                       >
                         Confirm
                       </button>
                       <button
                         onClick={() => updateTags(doc.id, { rejectTagIds: [assignment.tag.id] })}
+                        className="rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50"
                       >
                         Reject
                       </button>
@@ -98,6 +115,7 @@ export default function DocumentsPage() {
                   setNewTagLabel((prev) => ({ ...prev, [doc.id]: "" }));
                 }
               }}
+              className="mt-3 flex gap-2"
             >
               <input
                 placeholder="Add tag"
@@ -105,12 +123,18 @@ export default function DocumentsPage() {
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   setNewTagLabel((prev) => ({ ...prev, [doc.id]: event.target.value }))
                 }
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
-              <button type="submit">Add tag</button>
+              <button
+                type="submit"
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Add tag
+              </button>
             </form>
           </li>
         ))}
       </ul>
-    </main>
+    </div>
   );
 }

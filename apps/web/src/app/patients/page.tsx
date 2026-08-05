@@ -47,47 +47,55 @@ export default function PatientsPage() {
   }
 
   return (
-    <main>
-      <h1>Patients</h1>
-      {error && <p>Error: {error}</p>}
-      <ul>
-        {patients.map((patient) => (
-          <li key={patient.id}>
-            {patient.displayName}
-            {patient.externalMrn ? ` (${patient.externalMrn})` : ""}
-          </li>
-        ))}
-      </ul>
-      <h2>Add a patient</h2>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-semibold text-gray-900">Patients</h1>
+        {error && <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700">Error: {error}</p>}
+        <ul className="flex flex-col gap-2">
+          {patients.map((patient) => (
+            <li key={patient.id} className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900">
+              {patient.displayName}
+              {patient.externalMrn ? ` (${patient.externalMrn})` : ""}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex flex-col gap-4 border-t border-gray-200 pt-6">
+        <h2 className="text-lg font-semibold text-gray-900">Add a patient</h2>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
             Display name
-            <br />
             <input
               value={displayName}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)}
               required
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
           </label>
-        </div>
-        <div>
-          <label>
+          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
             External MRN (optional)
-            <br />
             <input
               value={externalMrn}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setExternalMrn(e.target.value)}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
           </label>
-        </div>
-        <button type="submit" disabled={!therapistId}>
-          Add patient
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={!therapistId}
+            className="w-fit rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Add patient
+          </button>
+        </form>
+      </div>
+
       <p>
-        <a href="/transcripts">Go to transcripts</a>
+        <a href="/transcripts" className="text-sm font-medium text-indigo-600 hover:underline">
+          Go to transcripts
+        </a>
       </p>
-    </main>
+    </div>
   );
 }

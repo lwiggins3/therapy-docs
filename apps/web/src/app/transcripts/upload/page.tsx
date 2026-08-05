@@ -52,61 +52,69 @@ export default function UploadTranscriptPage() {
   }
 
   return (
-    <main>
-      <h1>Upload a transcript</h1>
+    <div className="flex flex-col gap-4">
+      <h1 className="text-2xl font-semibold text-gray-900">Upload a transcript</h1>
       {patients.length === 0 && (
-        <p>
-          No patients yet — <a href="/patients">add one first</a>.
+        <p className="rounded-md bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          No patients yet —{" "}
+          <a href="/patients" className="font-medium underline">
+            add one first
+          </a>
+          .
         </p>
       )}
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>
-            Patient
-            <br />
-            <select value={patientId} onChange={(e) => setPatientId(e.target.value)} required>
-              <option value="" disabled>
-                Select a patient
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+          Patient
+          <select
+            value={patientId}
+            onChange={(e) => setPatientId(e.target.value)}
+            required
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="" disabled>
+              Select a patient
+            </option>
+            {patients.map((patient) => (
+              <option key={patient.id} value={patient.id}>
+                {patient.displayName}
               </option>
-              {patients.map((patient) => (
-                <option key={patient.id} value={patient.id}>
-                  {patient.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div>
-          <label>
-            Session date (optional)
-            <br />
-            <input
-              type="date"
-              value={sessionDate}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)}
-            />
-          </label>
-        </div>
-        <div>
-          <label>
-            File (PDF only)
-            <br />
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null)}
-              required
-            />
-          </label>
-        </div>
-        <button type="submit" disabled={!therapistId || !patientId}>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+          Session date (optional)
+          <input
+            type="date"
+            value={sessionDate}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSessionDate(e.target.value)}
+            className="w-fit rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+          File (PDF only)
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null)}
+            required
+            className="text-sm font-normal"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={!therapistId || !patientId}
+          className="w-fit rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
           Upload
         </button>
       </form>
-      <p>{status}</p>
+      {status && <p className="text-sm text-gray-600">{status}</p>}
       <p>
-        <a href="/transcripts">Back to transcripts</a>
+        <a href="/transcripts" className="text-sm font-medium text-indigo-600 hover:underline">
+          Back to transcripts
+        </a>
       </p>
-    </main>
+    </div>
   );
 }

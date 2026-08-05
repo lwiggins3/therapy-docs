@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { StatusBadge } from "../../../components/StatusBadge";
 import { apiUrl, getDevTherapist } from "../../../lib/api";
 
 type FolderUploadStatus = "pending" | "uploading" | "done" | "failed" | "skipped";
@@ -112,65 +113,74 @@ export default function UploadPage() {
   const pendingCount = folderItems.filter((item) => item.status === "pending").length;
 
   return (
-    <main>
-      <h1>Upload a document</h1>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-semibold text-gray-900">Upload a document</h1>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
             Title
-            <br />
             <input
               value={title}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
               required
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
           </label>
-        </div>
-        <div>
-          <label>
+          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
             File
-            <br />
             <input
               type="file"
               accept="application/pdf"
               onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null)}
               required
+              className="text-sm font-normal"
             />
           </label>
-        </div>
-        <button type="submit" disabled={!therapistId}>
-          Upload
-        </button>
-      </form>
-      <p>{status}</p>
+          <button
+            type="submit"
+            disabled={!therapistId}
+            className="w-fit rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Upload
+          </button>
+        </form>
+        {status && <p className="text-sm text-gray-600">{status}</p>}
+      </div>
 
-      <h2>Upload a folder</h2>
-      <p>
-        Recursively uploads every PDF found in the selected folder and its subfolders (each titled after its
-        filename); non-PDF files are skipped.
-      </p>
-      <input type="file" ref={folderInputRef} multiple onChange={handleFolderSelect} />
-      {folderItems.length > 0 && (
-        <>
-          <p>
-            <button onClick={() => void uploadFolder()} disabled={folderUploading || pendingCount === 0 || !therapistId}>
+      <div className="flex flex-col gap-4 border-t border-gray-200 pt-6">
+        <h2 className="text-lg font-semibold text-gray-900">Upload a folder</h2>
+        <p className="text-sm text-gray-600">
+          Recursively uploads every PDF found in the selected folder and its subfolders (each titled after its
+          filename); non-PDF files are skipped.
+        </p>
+        <input type="file" ref={folderInputRef} multiple onChange={handleFolderSelect} className="text-sm" />
+        {folderItems.length > 0 && (
+          <>
+            <button
+              onClick={() => void uploadFolder()}
+              disabled={folderUploading || pendingCount === 0 || !therapistId}
+              className="w-fit rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               {folderUploading ? "Uploading..." : `Upload ${pendingCount} PDF${pendingCount === 1 ? "" : "s"}`}
             </button>
-          </p>
-          <ul>
-            {folderItems.map((item) => (
-              <li key={item.path}>
-                {item.path} — {item.status}
-                {item.error && `: ${item.error}`}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+            <ul className="flex flex-col gap-2">
+              {folderItems.map((item) => (
+                <li key={item.path} className="flex items-center gap-2 text-sm text-gray-700">
+                  <StatusBadge status={item.status} />
+                  <span>{item.path}</span>
+                  {item.error && <span className="text-red-700">: {item.error}</span>}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
 
       <p>
-        <a href="/documents">Back to document library</a>
+        <a href="/documents" className="text-sm font-medium text-indigo-600 hover:underline">
+          Back to document library
+        </a>
       </p>
-    </main>
+    </div>
   );
 }

@@ -489,34 +489,66 @@ remove a library document or a transcript once uploaded, from the UI or the API.
       gone from disk, `GET /transcripts/:id` now 404s, and a repeat `DELETE` on the same id also
       404s (not a silent no-op).
 
-## 10. Tag suggestion feedback loop (feature request)
+## 10. Tag suggestion feedback loop (feature request) — DONE
 
-The system is currently stateless with respect to tag review outcomes. Reject just
-`db.documentTagAssignment.delete()`s the row — nothing records that a tag was suggested-and-
-rejected, for this document or in general. Manual add's only downstream effect is that the new
-label joins the global `existingTags` vocabulary list passed into every future `suggestTags()`
-prompt (`buildSuggestTagsPrompt`'s "prefer reusing one of these over inventing a near-duplicate")
-— a shared vocabulary hint, not a learning signal; it doesn't tell the model *which documents*
-warrant *which* tags. Confirm just flips `confirmed: true`, with no feedback to the LLM at all.
-Net effect: ten rejections of the same bad suggestion on similar documents would produce the same
-suggestion an eleventh time.
+Tracked in [#8](https://github.com/lwiggins3/therapy-docs/issues/8), now closed.
 
-- [ ] Include a handful of recent accept/reject decisions as few-shot examples in the
-      `suggestTags` prompt (`packages/llm-client/src/suggest-tags.ts`) — no fine-tuning
-      infrastructure needed, just richer prompt context. Needs a query for "recent confirmed vs.
-      rejected `DocumentTagAssignment` rows" that doesn't exist yet. Tradeoff: prompt size/cost
-      grows with example count — needs a sensible cap. Tracked in
-      [#8](https://github.com/lwiggins3/therapy-docs/issues/8).
+The system was stateless with respect to tag review outcomes — reject just
+`db.documentTagAssignment.delete()`d the row, leaving no record that a tag was
+suggested-and-rejected once gone.
 
-## 11. Style the application (feature request)
+- [x] `packages/db`: new append-only `TagSuggestionFeedback` model (`tagLabel`, `decision:
+      accepted | rejected`, `documentId`) — deliberately separate from `DocumentTagAssignment`,
+      which keeps representing only *current live assignments* (reject still deletes it,
+      unchanged). Pushed via `prisma db push` (this repo has no tracked migrations dir).
+- [x] `apps/api`: `DocumentsService.updateTags()` now logs a feedback row before each
+      confirm/reject, but only when the assignment's `source === "llm_suggested"` — manual adds
+      were never a model suggestion, so they carry no signal about model behavior and are
+      correctly excluded.
+- [x] `packages/llm-client`: `suggestTags()`'s input grew a `recentFeedback:
+      TagFeedbackExample[]` field; `buildSuggestTagsPrompt` renders it as a new prompt section
+      ("Recent feedback on this therapist's suggestions... avoid repeating rejected suggestions").
+      Both adapters (`gemini.ts`, `claude-vertex.ts`) just forward the widened input through
+      unchanged.
+- [x] `apps/worker`: `handleDocumentIngest` queries the 10 most recent `TagSuggestionFeedback`
+      rows (global, same scope as the existing `existingTags` query — a brand-new document has no
+      history of its own) and passes them through.
+- [x] New tests: `documents.service.test.ts` (confirm logs `accepted`, reject logs `rejected`,
+      manual tags log nothing), `suggest-tags.test.ts` (new file — prompt-builder feedback
+      section, plus first dedicated coverage for `parseTagSuggestionsResponse`).
+- [x] `pnpm turbo run lint typecheck test` clean. **Verified against the real local stack**: in a
+      real browser, rejected a suggested "Behavioral Strategies" tag and confirmed "fatigue" on an
+      existing library document; confirmed both landed as real `TagSuggestionFeedback` rows in
+      Postgres. Uploaded a fresh PDF through the real API — the real `handleDocumentIngest` run
+      queried those exact two rows and passed them into a live `suggestTags()` call against
+      Gemini (confirmed via a temporary log, removed after). Test document cleaned up via the
+      existing `DELETE /documents/:id`.
 
-`apps/web` currently has zero design system — plain semantic HTML (`<main>`, `<ul>`, `<form>`),
-no CSS framework/component library, only scattered inline `style={{}}` in a couple of spots. Fine
-for a functional prototype, not for something a therapist would actually want to use day to day.
+## 11. Style the application (feature request) — DONE
 
-- [ ] Add real visual styling/branding across all of `apps/web`'s pages (`/documents`,
-      `/transcripts`, `/patients`, `/settings`, upload/review screens) — a consistent layout,
-      typography, color palette, and basic component styling (buttons, forms, status badges,
-      nav). Needs a design-approach decision (Tailwind, CSS modules, a component library, etc.)
-      before implementation. Tracked in
-      [#9](https://github.com/lwiggins3/therapy-docs/issues/9).
+Tracked in [#9](https://github.com/lwiggins3/therapy-docs/issues/9), now closed. `apps/web` had
+zero design system before this — plain semantic HTML, no CSS framework, no shared nav.
+
+- [x] Added **Tailwind CSS v4** (`@tailwindcss/postcss` + `postcss.config.mjs` +
+      `src/app/globals.css`'s single `@import "tailwindcss";` — v4 needs no `tailwind.config.ts`
+      content-globs setup for this app's scale).
+- [x] New `apps/web/src/components/`: `Nav.tsx` (server component, top bar linking the five
+      top-level sections — Home/Documents/Patients/Transcripts/Settings, which previously had no
+      cross-links to each other at all) and `StatusBadge.tsx` (one color-coded pill component
+      reused for document/transcript `status`, recommendation `status`, and folder-upload
+      per-file status — one set of color mappings instead of four ad hoc ones).
+      `apps/web/src/app/layout.tsx` now renders `<Nav>` plus a consistent max-width page
+      container around `{children}`.
+- [x] Every page (`/`, `/documents`, `/documents/upload`, `/patients`, `/settings`,
+      `/transcripts`, `/transcripts/upload`, `/transcripts/[id]`) restyled in place with Tailwind
+      utility classes — consistent typography, card-style lists instead of bare `<ul><li>`,
+      one primary/danger button style, labeled form inputs, a consistent error-banner style, and
+      `<StatusBadge>` replacing raw status text. No structural/logic changes; the two pre-existing
+      `style={{ marginBottom: ... }}` inline styles were replaced by the cards' own spacing.
+      Deliberately no generic `Button`/`Card` component layer — every page already hand-rolled
+      its own buttons/forms/lists, so this matches the codebase's existing low-abstraction style
+      rather than inventing a component API nobody asked for.
+- [x] `pnpm turbo run lint typecheck` and a real `next build` all clean. **Verified in a real
+      browser** against the real local stack — clicked through every page (nav links, document
+      upload, tag confirm/reject, patient add, transcript upload, settings) and confirmed
+      consistent styling with no functional regressions.
