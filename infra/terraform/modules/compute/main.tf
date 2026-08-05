@@ -9,6 +9,29 @@ data "google_project" "current" {
   project_id = var.project_id
 }
 
+# --- Document AI: real OCR/text extraction for uploaded PDFs (see docs/roadmap.md item 1) ---
+
+# Processors live in "us"/"eu" multi-regions, not var.region's specific region (us-central1) —
+# same reason VERTEX_AI_LOCATION is split from GCP_REGION for Claude. "us" is where OCR_PROCESSOR
+# is available (confirmed against Google's Document AI locations doc).
+locals {
+  document_ai_location = "us"
+}
+
+resource "google_document_ai_processor" "ocr" {
+  project      = var.project_id
+  location     = local.document_ai_location
+  display_name = "therapy-docs-ocr-${var.environment}"
+  type         = "OCR_PROCESSOR"
+}
+
+locals {
+  # google_document_ai_processor only exposes the full resource name
+  # ("projects/{project}/locations/{location}/processors/{id}") — DocumentAiTextExtractor builds
+  # that path itself from a bare processor id, so pull the trailing segment back out here.
+  document_ai_processor_id = element(split("/", google_document_ai_processor.ocr.name), 5)
+}
+
 locals {
   # Placeholder image until CI/CD pushes real builds to the Artifact Registry repo above.
   placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello"
@@ -273,10 +296,17 @@ resource "google_cloud_run_v2_service" "worker" {
         value = "gemini"
       }
       env {
-        # No Document AI processor has been provisioned (see docs/roadmap.md) — real PDF uploads
-        # get UTF-8-decoded (garbage) text in the deployed env too, same limitation as local dev.
         name  = "TEXT_EXTRACTOR"
-        value = "plain"
+        value = "document-ai"
+      }
+      env {
+        # Distinct from GCP_REGION — see the google_document_ai_processor comment above.
+        name  = "DOCUMENT_AI_LOCATION"
+        value = local.document_ai_location
+      }
+      env {
+        name  = "DOCUMENT_AI_PROCESSOR_ID"
+        value = local.document_ai_processor_id
       }
       env {
         name  = "BIGQUERY_AUDIT_DATASET"

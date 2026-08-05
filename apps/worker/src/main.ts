@@ -61,7 +61,9 @@ function getDocumentIngestDeps(): DocumentIngestDeps {
     textExtractor: createTextExtractor({
       provider: (process.env.TEXT_EXTRACTOR as TextExtractorProvider) ?? "plain",
       projectId: process.env.GCP_PROJECT_ID,
-      location: process.env.GCP_REGION,
+      // Document AI processors live in "us"/"eu" multi-regions, not GCP_REGION's specific region
+      // (e.g. us-central1) — same reason VERTEX_AI_LOCATION is split from GCP_REGION for Claude.
+      location: process.env.DOCUMENT_AI_LOCATION,
       processorId: process.env.DOCUMENT_AI_PROCESSOR_ID,
     }),
     llmClient: createLlmClient({
@@ -89,7 +91,7 @@ function getTranscriptIngestDeps(): TranscriptIngestDeps {
     textExtractor: createTextExtractor({
       provider: (process.env.TEXT_EXTRACTOR as TextExtractorProvider) ?? "plain",
       projectId: process.env.GCP_PROJECT_ID,
-      location: process.env.GCP_REGION,
+      location: process.env.DOCUMENT_AI_LOCATION,
       processorId: process.env.DOCUMENT_AI_PROCESSOR_ID,
     }),
     llmClient: createLlmClient({

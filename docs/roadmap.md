@@ -28,20 +28,45 @@ can't resolve multi-file workspace packages at runtime — see each app's README
 seed + `/dev/therapist` shim (no real auth yet), and a `LOCAL_STORAGE_DIR` fix (must be an
 absolute path since `apps/api`/`apps/worker` run from different directories).
 
-- [ ] **Bug, confirmed by the real end-to-end browser test (item 6)**: real PDF uploads come back
-      with the LLM itself reporting "unreadable content," "corrupted file," "technical issue" for
-      suggested tags — not a model quality problem, a text-extraction problem. `TEXT_EXTRACTOR`
-      is set to `plain` everywhere (local and deployed) because no Document AI processor has ever
+- [x] **Bug, confirmed by the real end-to-end browser test (item 6), now fixed and verified**:
+      real PDF uploads used to come back with the LLM itself reporting "unreadable content,"
+      "corrupted file," "technical issue" for suggested tags — not a model quality problem, a
+      text-extraction problem. `TEXT_EXTRACTOR`
+      was set to `plain` everywhere (local and deployed) because no Document AI processor had ever
       been provisioned; `PlainTextTextExtractor` (`apps/worker/src/lib/text-extraction.ts`)
       UTF-8-decodes the raw file bytes, which works for `.txt`/`.md` but produces binary garbage
-      for real PDFs — the LLM is correctly recognizing that garbage as unreadable. This was
+      for real PDFs — the LLM was correctly recognizing that garbage as unreadable. This was
       flagged as a "known limitation" caveat as far back as item 4's local testing (synthetic test
       files were plain text mislabeled as `application/pdf` to work around it) but never actually
-      fixed. Needs: provision a real Document AI processor in the GCP project (`DOCUMENT_AI_
-      PROCESSOR_ID`), switch `TEXT_EXTRACTOR=document-ai` for `apps/worker` (local and deployed),
-      and smoke-test against a real scanned/real PDF end to end — `DocumentAiTextExtractor` is
-      already written but has never been exercised against a live processor. Tracked in
-      [#1](https://github.com/lwiggins3/therapy-docs/issues/1).
+      fixed. Tracked in [#1](https://github.com/lwiggins3/therapy-docs/issues/1).
+      - [x] `google_document_ai_processor` (`OCR_PROCESSOR`, `us` multi-region — Document AI
+            processors aren't available per-region like `us-central1`, same reason
+            `VERTEX_AI_LOCATION` is split from `GCP_REGION`) added to
+            `infra/terraform/modules/compute/main.tf`, fully Terraform-managed — no manual Console
+            provisioning step needed. `worker`'s env now gets `TEXT_EXTRACTOR=document-ai`,
+            `DOCUMENT_AI_LOCATION`, and `DOCUMENT_AI_PROCESSOR_ID` (the real processor id, pulled
+            from the resource) automatically.
+      - [x] `roles/documentai.apiUser` granted to the `worker` service account
+            (`infra/terraform/modules/iam/main.tf`).
+      - [x] Fixed a real bug this surfaced: `apps/worker/src/main.ts` was passing `GCP_REGION`
+            (`us-central1`) as Document AI's `location` — would have 404'd against a real
+            processor. Now reads the new `DOCUMENT_AI_LOCATION` env var instead.
+      - [x] `gcloud services enable documentai.googleapis.com` run by you (fixed the recurring
+            `invalid_rapt` ADC reauth issue by re-running `gcloud auth application-default login`
+            under the correct account, `larry@agere-solutions.com` — the default ADC account was a
+            personal Gmail account with no access to the `therapy-docs` project/state bucket).
+            `terraform apply` run against `environments/dev`: 2 added (the processor,
+            `roles/documentai.apiUser` binding), 3 changed (worker env vars; the api/web/worker
+            scaling-block diff was unrelated pre-existing drift in a read-only Cloud Run field, not
+            a real config change), 0 destroyed. Live processor:
+            `projects/therapy-docs/locations/us/processors/85a9b9387bed8733`. Local `.env` updated
+            with `TEXT_EXTRACTOR=document-ai` and the real `DOCUMENT_AI_PROCESSOR_ID`.
+      - [x] Smoke-tested locally: uploaded a real PDF (`100_compassion_fatigue.pdf`) via
+            `POST /documents`, worker picked it up off the real Pub/Sub emulator, document landed
+            `status: "ready"` (not `failed`) with sensible LLM-suggested tags (`compassion`,
+            `fatigue`, `Self-Care`, `Coping Skills`, `Behavioral Strategies`) — confirms Document AI
+            is extracting real text instead of the old UTF-8-garbage-from-`plain` behavior. Not yet
+            smoke-tested against the *deployed* worker. #1 still open — close once you've confirmed.
 
 ## 2. Real GCP dev environment — DONE (see `docs/runbooks/gcp-dev-setup.md`)
 

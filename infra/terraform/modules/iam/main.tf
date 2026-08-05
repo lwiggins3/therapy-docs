@@ -53,6 +53,12 @@ resource "google_project_iam_member" "worker_bigquery_data_editor" {
   member  = "serviceAccount:${google_service_account.app["worker"].email}"
 }
 
+resource "google_project_iam_member" "worker_documentai_api_user" {
+  project = var.project_id
+  role    = "roles/documentai.apiUser"
+  member  = "serviceAccount:${google_service_account.app["worker"].email}"
+}
+
 # api uploads to both buckets, worker downloads from both.
 resource "google_storage_bucket_iam_member" "api_documents_bucket" {
   bucket = var.documents_bucket_name
