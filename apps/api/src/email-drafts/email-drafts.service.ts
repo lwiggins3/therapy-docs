@@ -1,25 +1,48 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { db } from "@therapy-docs/db";
 import { createLlmClient, type LlmClient, type LlmProvider } from "@therapy-docs/llm-client";
+import { createStorageClient, type StorageClient } from "@therapy-docs/storage";
+import MailComposer from "nodemailer/lib/mail-composer";
 import { GmailService } from "../gmail/gmail.service";
 import { APPROVED_RECOMMENDATION_STATUSES } from "./approved-recommendations";
 
-/** Builds a minimal RFC 2822 message for Gmail's drafts.create — Subject + plain-text body only.
- * "To" is deliberately left blank: Patient records intentionally store no email address (data
- * minimization, see docs/hipaa-compliance.md) — the therapist fills in the recipient themselves
- * before sending from their own Gmail. */
-function buildRawEmailMessage(input: { subject: string; body: string }): string {
-  const message = [`Subject: ${input.subject}`, "Content-Type: text/plain; charset=utf-8", "", input.body].join(
-    "\r\n",
-  );
-  return Buffer.from(message).toString("base64url");
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+}
+
+/** Builds a full RFC 2822 message for Gmail's drafts.create — Subject + plain-text body + one
+ * attachment per approved document. "To" is deliberately left blank: Patient records
+ * intentionally store no email address (data minimization, see docs/hipaa-compliance.md) — the
+ * therapist fills in the recipient themselves before sending from their own Gmail. */
+export async function buildRawEmailMessage(input: {
+  subject: string;
+  body: string;
+  attachments: EmailAttachment[];
+}): Promise<string> {
+  const mail = new MailComposer({ subject: input.subject, text: input.body, attachments: input.attachments });
+  const message = await new Promise<Buffer>((resolve, reject) => {
+    mail.compile().build((error, message) => {
+      if (error) reject(error);
+      else resolve(message);
+    });
+  });
+  return message.toString("base64url");
 }
 
 @Injectable()
 export class EmailDraftsService {
   private llmClient?: LlmClient;
+  private readonly storage: StorageClient;
 
-  constructor(private readonly gmailService: GmailService) {}
+  constructor(private readonly gmailService: GmailService) {
+    this.storage = createStorageClient({
+      provider: (process.env.STORAGE_PROVIDER as "local" | "gcs") ?? "local",
+      bucket: process.env.GCS_DOCUMENTS_BUCKET,
+      localDir: process.env.LOCAL_STORAGE_DIR,
+    });
+  }
 
   // Constructed lazily, not in the constructor — Vertex AI SDK clients can crash the process on
   // construction if GCP credentials aren't configured (see apps/worker/src/main.ts's comment on
@@ -64,10 +87,18 @@ export class EmailDraftsService {
       approvedDocuments,
     });
 
+    const attachments: EmailAttachment[] = await Promise.all(
+      recommendations.map(async (rec) => ({
+        filename: `${rec.document.title}.${rec.document.mimeType === "application/pdf" ? "pdf" : "bin"}`,
+        content: await this.storage.download({ uri: rec.document.gcsUri }),
+        contentType: rec.document.mimeType,
+      })),
+    );
+
     const gmail = await this.gmailService.getAuthorizedGmailClient(input.therapistId);
     const { data } = await gmail.users.drafts.create({
       userId: "me",
-      requestBody: { message: { raw: buildRawEmailMessage({ subject, body }) } },
+      requestBody: { message: { raw: await buildRawEmailMessage({ subject, body, attachments }) } },
     });
     if (!data.id) {
       throw new Error("Gmail did not return a draft id");

@@ -246,14 +246,38 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       project-wide — for `apps/api/src/lib/token-store.ts`'s on-demand `gmail-token-*` secret
       creation) is now written — see item 6's "real Cloud Run runtime config" entry below, which
       also picks up the `ack_deadline_seconds = 600` fix once applied.
-- [ ] **Bug, found during the real end-to-end browser test**: the Gmail draft doesn't actually
-      attach the approved document(s) — `EmailDraftsService.finalize()` (`apps/api/src/
-      email-drafts/email-drafts.service.ts`) only ever built a plain-text message (subject + body
-      mentioning the documents by title); nothing in `buildRawEmailMessage()` fetches the
-      document's bytes from GCS or attaches them as a MIME part. Needs a real multipart/MIME
-      message (subject + body + one attachment per approved document, fetched via
-      `StorageClient.download()`) instead of the current single-part text message. Tracked in
-      [#3](https://github.com/lwiggins3/therapy-docs/issues/3).
+- [x] **Bug, found during the real end-to-end browser test, now fixed and verified — #3 closed.**
+      The Gmail draft didn't actually attach the approved document(s) —
+      `EmailDraftsService.finalize()` (`apps/api/src/email-drafts/email-drafts.service.ts`) only
+      ever built a plain-text message (subject + body mentioning the documents by title); nothing
+      in `buildRawEmailMessage()` fetched the document's bytes or attached them as a MIME part.
+      - [x] `EmailDraftsService` now constructs a `StorageClient` (same pattern as
+            `DocumentsService`/`TranscriptsService`) and downloads each approved document's bytes
+            via `storage.download({ uri: rec.document.gcsUri })` before building the message.
+      - [x] `buildRawEmailMessage()` rewritten to use `nodemailer`'s `MailComposer` (new
+            dependency — hand-rolling MIME multipart boundaries/encoding correctly is easy to get
+            subtly wrong) to build a real `multipart/mixed` message: the plain-text body plus one
+            attachment per approved document (filename derived from the document's title +
+            extension from its `mimeType`).
+      - [x] New unit test (`email-drafts.service.test.ts`) decodes the base64url raw message and
+            asserts the multipart structure, attachment filename, content type, and byte content —
+            same "test the extracted pure logic without DB mocking" approach as
+            `approved-recommendations.test.ts`.
+      - [x] `pnpm turbo run lint typecheck test` clean across all touched packages/apps.
+      - [x] **Verified against the real local stack, not just unit tests.** Started `apps/api` and
+            `apps/worker` locally, created a patient, uploaded a real transcript, manually added a
+            recommendation (the transcript's content didn't match either seeded library document
+            closely enough for an LLM-suggested one — expected, not a bug), and called
+            `POST /email-drafts` for real. It created a real Gmail draft
+            (`gmailDraftId: r-63325822191169058`) in the dev therapist's actual Gmail Drafts folder
+            (Gmail connection + refresh token already set up locally from item 5's earlier
+            verification). Fetched that draft back via the real Gmail API
+            (`gmail.users.drafts.get`) and confirmed its structure directly: top-level
+            `multipart/mixed` with a `text/plain` body part and an `application/pdf` part
+            (`Test therapy.pdf`, 118,104 bytes, `Content-Disposition: attachment`) — a real
+            attachment, not just text mentioning the document. Test patient/transcript/
+            recommendation/draft rows cleaned up afterward; the Gmail draft itself was left in
+            place.
 
 ## 6. CI/CD
 
