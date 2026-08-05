@@ -115,9 +115,12 @@ absolute path since `apps/api`/`apps/worker` run from different directories).
       item 5 (`draft-email.test.ts`) — both cover their response parsers
 - [x] Vitest added to `apps/api` as part of item 5 (first coverage for this app) —
       `signed-state.test.ts` and `approved-recommendations.test.ts`
-- [ ] `packages/storage` still has no tests — add as its logic gets exercised by upcoming roadmap
-      items, same "test alongside the feature" approach. Tracked in
-      [#2](https://github.com/lwiggins3/therapy-docs/issues/2).
+- [x] `packages/storage` test coverage added — #2 closed. `LocalDiskStorageClient` is tested
+      against a real temp directory (upload/download round-trip, nested-key directory creation,
+      binary-content integrity, malformed-uri error). `GcsStorageClient` and
+      `createStorageClient()`'s provider dispatch are tested with `@google-cloud/storage` mocked
+      (no GCS emulator available locally, unlike Postgres/Pub/Sub) — covers bucket/key
+      construction, the `gs://` uri format, and the malformed-uri error path.
 
 ## 4. Transcript → recommendation pipeline — DONE
 
