@@ -422,12 +422,36 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       exception in `docs/hipaa-compliance.md`). Tracked in
       [#5](https://github.com/lwiggins3/therapy-docs/issues/5).
 
-## 8. Folder upload (feature request)
+## 8. Folder upload (feature request) — DONE
 
-- [ ] `apps/web`'s upload form should accept a folder, not just individual files — recursively
-      walking all nested subfolders and documents inside it and uploading each one through the
-      existing per-document pipeline (item 1). Tracked in
-      [#6](https://github.com/lwiggins3/therapy-docs/issues/6).
+Tracked in [#6](https://github.com/lwiggins3/therapy-docs/issues/6), now closed.
+
+- [x] `apps/web`'s upload form (`/documents/upload`) now has a second "Upload a folder" section
+      alongside the existing single-file form, using a file input with the (non-standard, so set
+      imperatively via a ref rather than as a JSX prop) `webkitdirectory` attribute — the actual
+      recursive directory walk is the browser's own native behavior, not code this app has to
+      implement; it hands back a flat `FileList` with every nested file's relative path already
+      resolved.
+      - Each selected file is classified `pending` (PDF) or `skipped` (anything else, matching
+        the existing PDF-only restriction from item 4) and shown as a per-file status list.
+      - Selected PDFs upload sequentially through the *existing* `POST /documents` pipeline —
+        same endpoint the single-file form uses, no new server-side code — auto-titled from the
+        filename (stripped of `.pdf`) since there's no per-file title input for a batch. Each
+        row's status updates live (`pending` → `uploading` → `done`/`failed`, with the HTTP
+        status or error message on failure) rather than blocking on the whole batch.
+- [x] `pnpm turbo run lint typecheck test` clean.
+- [x] **Verified in a real browser against the real local stack**, not just typechecked. Selected
+      3 real PDFs plus a non-PDF (`README.md`) via the folder input: the non-PDF was immediately
+      marked `skipped`, all 3 PDFs marked `pending` with the "Upload 3 PDFs" button reflecting the
+      count. Clicked upload — all 3 went `pending` → `done` in order, the worker (already running)
+      picked each one off the real Pub/Sub emulator and processed it to `status: "ready"`,
+      confirmed via `GET /documents`. Test documents cleaned up afterward using item 9's new
+      `DELETE /documents/:id`.
+      - **Scope note**: this confirms the multi-file upload/skip/status logic for real. It doesn't
+        prove the *native OS directory-picker* dialog itself works, since that's a real
+        browser-chrome interaction outside what CDP-based automation can drive — that part is
+        exactly the standard `webkitdirectory` behavior already supported by all major browsers,
+        not custom code in this app.
 
 ## 9. Delete documents and transcripts (feature request) — DONE
 
