@@ -79,16 +79,34 @@ export class DocumentsService {
     }
 
     for (const tagId of input.confirmTagIds ?? []) {
+      const assignment = await db.documentTagAssignment.findUnique({
+        where: { documentId_tagId: { documentId, tagId } },
+        include: { tag: true },
+      });
       await db.documentTagAssignment.update({
         where: { documentId_tagId: { documentId, tagId } },
         data: { confirmed: true },
       });
+      if (assignment?.source === "llm_suggested") {
+        await db.tagSuggestionFeedback.create({
+          data: { documentId, tagLabel: assignment.tag.label, decision: "accepted" },
+        });
+      }
     }
 
     for (const tagId of input.rejectTagIds ?? []) {
+      const assignment = await db.documentTagAssignment.findUnique({
+        where: { documentId_tagId: { documentId, tagId } },
+        include: { tag: true },
+      });
       await db.documentTagAssignment.delete({
         where: { documentId_tagId: { documentId, tagId } },
       });
+      if (assignment?.source === "llm_suggested") {
+        await db.tagSuggestionFeedback.create({
+          data: { documentId, tagLabel: assignment.tag.label, decision: "rejected" },
+        });
+      }
     }
 
     for (const label of input.addLabels ?? []) {

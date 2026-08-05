@@ -69,6 +69,7 @@ model LibraryDocument {
   tags          DocumentTagAssignment[]
   recommendations Recommendation[]
   emailDraftDocuments EmailDraftDocument[]
+  tagFeedback   TagSuggestionFeedback[]
 
   @@index([therapistId])
   @@map("library_documents")
@@ -102,6 +103,26 @@ model DocumentTagAssignment {
 
   @@id([documentId, tagId])
   @@map("document_tag_assignments")
+}
+
+enum TagFeedbackDecision {
+  accepted
+  rejected
+}
+
+// Append-only log of therapist decisions on llm_suggested tags — DocumentTagAssignment only
+// tracks current live assignments (reject deletes the row), so this is what suggestTags() few-
+// shots against to avoid repeating rejected suggestions. See packages/llm-client/suggest-tags.ts.
+model TagSuggestionFeedback {
+  id         String              @id @default(uuid())
+  documentId String
+  tagLabel   String
+  decision   TagFeedbackDecision
+  createdAt  DateTime            @default(now())
+
+  document   LibraryDocument @relation(fields: [documentId], references: [id])
+
+  @@map("tag_suggestion_feedback")
 }
 
 model Transcript {

@@ -2,7 +2,7 @@ import { ClaudeVertexLlmClient } from "./adapters/claude-vertex";
 import { GeminiLlmClient } from "./adapters/gemini";
 import type { LlmClient } from "./types";
 
-export type { DocumentRecommendation, LlmClient, TagSuggestion } from "./types";
+export type { DocumentRecommendation, LlmClient, TagFeedbackExample, TagSuggestion } from "./types";
 export { ClaudeVertexLlmClient } from "./adapters/claude-vertex";
 export { GeminiLlmClient } from "./adapters/gemini";
 

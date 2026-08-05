@@ -110,3 +110,95 @@ describe("DocumentsService.deleteDocument", () => {
     await expect(service.deleteDocument(document.id, otherTherapistId)).rejects.toThrow(/different therapist/);
   });
 });
+
+describe("DocumentsService.updateTags — tag suggestion feedback logging", () => {
+  let therapistId: string;
+  let service: DocumentsService;
+  let storage: LocalDiskStorageClient;
+  const documentIds: string[] = [];
+  const tagIds: string[] = [];
+
+  beforeAll(async () => {
+    const therapist = await db.therapist.create({
+      data: { email: `test-${randomUUID()}@example.com`, displayName: "Test Therapist" },
+    });
+    therapistId = therapist.id;
+    service = new DocumentsService();
+    storage = new LocalDiskStorageClient({ baseDir: process.env.LOCAL_STORAGE_DIR! });
+  });
+
+  afterEach(async () => {
+    await db.tagSuggestionFeedback.deleteMany({ where: { documentId: { in: documentIds } } });
+    await db.documentTagAssignment.deleteMany({ where: { documentId: { in: documentIds } } });
+    await db.libraryDocument.deleteMany({ where: { id: { in: documentIds } } });
+    await db.tag.deleteMany({ where: { id: { in: tagIds } } });
+    documentIds.length = 0;
+    tagIds.length = 0;
+  });
+
+  afterAll(async () => {
+    await db.therapist.delete({ where: { id: therapistId } });
+    await db.$disconnect();
+  });
+
+  async function seedDocument() {
+    const key = `documents/${randomUUID()}.txt`;
+    const { uri } = await storage.upload({ key, data: Buffer.from("hello"), contentType: "text/plain" });
+    const document = await db.libraryDocument.create({
+      data: { therapistId, title: "Test document", gcsUri: uri, mimeType: "text/plain", status: "ready" },
+    });
+    documentIds.push(document.id);
+    return document;
+  }
+
+  async function seedTag(label: string) {
+    const tag = await db.tag.create({ data: { label } });
+    tagIds.push(tag.id);
+    return tag;
+  }
+
+  it("logs an accepted TagSuggestionFeedback row when an llm_suggested tag is confirmed", async () => {
+    const document = await seedDocument();
+    const tag = await seedTag(`anxiety-${randomUUID()}`);
+    await db.documentTagAssignment.create({
+      data: { documentId: document.id, tagId: tag.id, source: "llm_suggested", confirmed: false },
+    });
+
+    await service.updateTags(document.id, therapistId, { confirmTagIds: [tag.id] });
+
+    const feedback = await db.tagSuggestionFeedback.findMany({ where: { documentId: document.id } });
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0]?.tagLabel).toBe(tag.label);
+    expect(feedback[0]?.decision).toBe("accepted");
+  });
+
+  it("logs a rejected TagSuggestionFeedback row when an llm_suggested tag is rejected", async () => {
+    const document = await seedDocument();
+    const tag = await seedTag(`miscellaneous-${randomUUID()}`);
+    await db.documentTagAssignment.create({
+      data: { documentId: document.id, tagId: tag.id, source: "llm_suggested", confirmed: false },
+    });
+
+    await service.updateTags(document.id, therapistId, { rejectTagIds: [tag.id] });
+
+    const feedback = await db.tagSuggestionFeedback.findMany({ where: { documentId: document.id } });
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0]?.tagLabel).toBe(tag.label);
+    expect(feedback[0]?.decision).toBe("rejected");
+  });
+
+  it("does not log feedback for manual tags", async () => {
+    const document = await seedDocument();
+    const label = `custom-label-${randomUUID()}`;
+
+    await service.updateTags(document.id, therapistId, { addLabels: [label] });
+    const addedTag = await db.tag.findUniqueOrThrow({ where: { label } });
+    tagIds.push(addedTag.id);
+
+    // Confirming/rejecting a manual assignment shouldn't log feedback either.
+    await service.updateTags(document.id, therapistId, { rejectTagIds: [addedTag.id] });
+
+    const feedback = await db.tagSuggestionFeedback.findMany({ where: { documentId: document.id } });
+    expect(feedback).toHaveLength(0);
+  });
+});

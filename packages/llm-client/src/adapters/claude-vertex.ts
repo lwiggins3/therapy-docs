@@ -1,5 +1,5 @@
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
-import type { DocumentRecommendation, LlmClient, TagSuggestion } from "../types";
+import type { DocumentRecommendation, LlmClient, TagFeedbackExample, TagSuggestion } from "../types";
 import { buildDraftEmailPrompt, parseDraftEmailResponse } from "../draft-email";
 import { buildRecommendDocumentsPrompt, parseRecommendDocumentsResponse } from "../recommend-documents";
 import { buildSuggestTagsPrompt, parseTagSuggestionsResponse } from "../suggest-tags";
@@ -27,7 +27,11 @@ export class ClaudeVertexLlmClient implements LlmClient {
     this.embeddingLocation = options.embeddingLocation ?? options.region;
   }
 
-  async suggestTags(input: { documentText: string; existingTags: string[] }): Promise<TagSuggestion[]> {
+  async suggestTags(input: {
+    documentText: string;
+    existingTags: string[];
+    recentFeedback: TagFeedbackExample[];
+  }): Promise<TagSuggestion[]> {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 1024,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { TagSuggestion } from "./types";
+import type { TagFeedbackExample, TagSuggestion } from "./types";
 
 const MAX_DOCUMENT_TEXT_CHARS = 8000;
 
@@ -13,15 +13,28 @@ const TagSuggestionsResponseSchema = z.object({
 });
 
 /** Shared prompt used by every adapter's suggestTags(), so wording only lives in one place. */
-export function buildSuggestTagsPrompt(input: { documentText: string; existingTags: string[] }): string {
+export function buildSuggestTagsPrompt(input: {
+  documentText: string;
+  existingTags: string[];
+  recentFeedback: TagFeedbackExample[];
+}): string {
   const truncated = input.documentText.slice(0, MAX_DOCUMENT_TEXT_CHARS);
   const existingTagsList =
     input.existingTags.length > 0 ? input.existingTags.map((tag) => `- ${tag}`).join("\n") : "(none yet)";
+  const recentFeedbackList =
+    input.recentFeedback.length > 0
+      ? input.recentFeedback
+          .map((f) => `- ${f.decision === "accepted" ? "ACCEPTED" : "REJECTED"}: "${f.label}"`)
+          .join("\n")
+      : "(none yet)";
 
   return `You are helping a therapist tag a document in their curated library of patient handouts and worksheets.
 
 Existing tags already in use (prefer reusing one of these over inventing a near-duplicate):
 ${existingTagsList}
+
+Recent feedback on this therapist's suggestions (avoid repeating rejected suggestions in similar contexts; lean into patterns that were accepted):
+${recentFeedbackList}
 
 Document text:
 """

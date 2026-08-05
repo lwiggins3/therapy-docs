@@ -1,5 +1,5 @@
 import { VertexAI } from "@google-cloud/vertexai";
-import type { DocumentRecommendation, LlmClient, TagSuggestion } from "../types";
+import type { DocumentRecommendation, LlmClient, TagFeedbackExample, TagSuggestion } from "../types";
 import { buildDraftEmailPrompt, parseDraftEmailResponse } from "../draft-email";
 import { buildRecommendDocumentsPrompt, parseRecommendDocumentsResponse } from "../recommend-documents";
 import { buildSuggestTagsPrompt, parseTagSuggestionsResponse } from "../suggest-tags";
@@ -29,7 +29,11 @@ export class GeminiLlmClient implements LlmClient {
     this.embeddingLocation = options.embeddingLocation ?? options.location;
   }
 
-  async suggestTags(input: { documentText: string; existingTags: string[] }): Promise<TagSuggestion[]> {
+  async suggestTags(input: {
+    documentText: string;
+    existingTags: string[];
+    recentFeedback: TagFeedbackExample[];
+  }): Promise<TagSuggestion[]> {
     const model = this.vertexAi.getGenerativeModel({
       model: this.model,
       generationConfig: { responseMimeType: "application/json" },

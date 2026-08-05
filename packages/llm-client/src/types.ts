@@ -8,6 +8,12 @@ export interface TagSuggestion {
   confidence: number;
 }
 
+/** A past therapist decision on an llm_suggested tag, fed back into suggestTags() as a few-shot example. */
+export interface TagFeedbackExample {
+  label: string;
+  decision: "accepted" | "rejected";
+}
+
 export interface DocumentRecommendation {
   documentId: string;
   rationale: string;
@@ -16,7 +22,11 @@ export interface DocumentRecommendation {
 
 export interface LlmClient {
   /** Suggest tags for a newly uploaded library document, for therapist review. */
-  suggestTags(input: { documentText: string; existingTags: string[] }): Promise<TagSuggestion[]>;
+  suggestTags(input: {
+    documentText: string;
+    existingTags: string[];
+    recentFeedback: TagFeedbackExample[];
+  }): Promise<TagSuggestion[]>;
 
   /** Produce a float embedding for similarity search (documents and transcripts share the same space). */
   embed(input: { text: string }): Promise<number[]>;

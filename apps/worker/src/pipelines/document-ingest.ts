@@ -11,6 +11,9 @@ export interface DocumentIngestDeps {
   llmClient: LlmClient;
 }
 
+/** How many recent tag accept/reject decisions to few-shot suggestTags() with. */
+const RECENT_FEEDBACK_LIMIT = 10;
+
 /**
  * Document library ingestion pipeline: extract text, embed it, ask the LLM for tag
  * suggestions, then update the LibraryDocument row so the therapist can review suggested tags
@@ -37,9 +40,14 @@ export async function handleDocumentIngest(
     `;
 
     const existingTags = await db.tag.findMany({ select: { label: true } });
+    const recentFeedback = await db.tagSuggestionFeedback.findMany({
+      orderBy: { createdAt: "desc" },
+      take: RECENT_FEEDBACK_LIMIT,
+    });
     const suggestions = await deps.llmClient.suggestTags({
       documentText: text,
       existingTags: existingTags.map((tag) => tag.label),
+      recentFeedback: recentFeedback.map((f) => ({ label: f.tagLabel, decision: f.decision })),
     });
 
     for (const suggestion of suggestions) {
