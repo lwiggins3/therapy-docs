@@ -42,4 +42,7 @@ export interface LlmClient {
     patientDisplayName: string;
     approvedDocuments: { id: string; title: string }[];
   }): Promise<{ subject: string; body: string }>;
+
+  /** Produce a short factual recap of a session transcript, for the therapist's quick reference. */
+  summarizeTranscript(input: { transcriptText: string }): Promise<string>;
 }

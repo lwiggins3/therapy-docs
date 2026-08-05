@@ -39,6 +39,10 @@ class StubLlmClient implements LlmClient {
   async draftEmail(): Promise<{ subject: string; body: string }> {
     throw new Error("not used in this test");
   }
+
+  async summarizeTranscript(): Promise<string> {
+    return "Test summary.";
+  }
 }
 
 class StubAuditLogger implements AuditLoggerLike {
@@ -155,6 +159,7 @@ describe("handleTranscriptIngest", () => {
 
     const updated = await db.transcript.findUniqueOrThrow({ where: { id: transcript.id } });
     expect(updated.status).toBe("ready");
+    expect(updated.summary).toBe("Test summary.");
 
     expect(auditLogger.events).toHaveLength(1);
     expect(auditLogger.events[0]).toMatchObject({

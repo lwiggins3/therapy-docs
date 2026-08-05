@@ -36,6 +36,7 @@ model Patient {
   therapistId  String
   displayName  String
   externalMrn  String? // optional pointer to the practice's EHR record; no PHI beyond a display name is stored here
+  email        String? // optional — prefills the Gmail draft's "To" address; see docs/hipaa-compliance.md
   createdAt    DateTime @default(now())
 
   therapist    Therapist    @relation(fields: [therapistId], references: [id])
@@ -133,6 +134,7 @@ model Transcript {
   mimeType     String
   status       ProcessingStatus @default(processing)
   sessionDate  DateTime?
+  summary      String? // short LLM-generated recap of the session, set once ingest finishes
   embedding    Unsupported("vector(1536)")?
   createdAt    DateTime         @default(now())
 

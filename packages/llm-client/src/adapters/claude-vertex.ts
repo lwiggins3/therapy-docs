@@ -3,6 +3,7 @@ import type { DocumentRecommendation, LlmClient, TagFeedbackExample, TagSuggesti
 import { buildDraftEmailPrompt, parseDraftEmailResponse } from "../draft-email";
 import { buildRecommendDocumentsPrompt, parseRecommendDocumentsResponse } from "../recommend-documents";
 import { buildSuggestTagsPrompt, parseTagSuggestionsResponse } from "../suggest-tags";
+import { buildSummarizeTranscriptPrompt, parseSummarizeTranscriptResponse } from "../summarize-transcript";
 import { embedWithVertexAi } from "../vertex-embedding";
 
 /**
@@ -82,5 +83,18 @@ export class ClaudeVertexLlmClient implements LlmClient {
       throw new Error("Claude response contained no text block");
     }
     return parseDraftEmailResponse(textBlock.text);
+  }
+
+  async summarizeTranscript(input: { transcriptText: string }): Promise<string> {
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 1024,
+      messages: [{ role: "user", content: buildSummarizeTranscriptPrompt(input) }],
+    });
+    const textBlock = response.content.find((block) => block.type === "text");
+    if (!textBlock || textBlock.type !== "text") {
+      throw new Error("Claude response contained no text block");
+    }
+    return parseSummarizeTranscriptResponse(textBlock.text);
   }
 }

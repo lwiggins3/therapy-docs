@@ -25,6 +25,7 @@ describe("DocumentsService.deleteDocument", () => {
   });
 
   afterEach(async () => {
+    await db.tagSuggestionFeedback.deleteMany({ where: { documentId: { in: documentIds } } });
     await db.documentTagAssignment.deleteMany({ where: { documentId: { in: documentIds } } });
     await db.recommendation.deleteMany({ where: { documentId: { in: documentIds } } });
     await db.libraryDocument.deleteMany({ where: { id: { in: documentIds } } });
@@ -57,6 +58,9 @@ describe("DocumentsService.deleteDocument", () => {
     await db.documentTagAssignment.create({
       data: { documentId: document.id, tagId: tag.id, source: "manual", confirmed: true },
     });
+    const feedback = await db.tagSuggestionFeedback.create({
+      data: { documentId: document.id, tagLabel: tag.label, decision: "accepted" },
+    });
 
     const patient = await db.patient.create({ data: { therapistId, displayName: "Test Patient" } });
     const transcript = await db.transcript.create({
@@ -86,6 +90,7 @@ describe("DocumentsService.deleteDocument", () => {
       }),
     ).resolves.toBeNull();
     await expect(db.recommendation.findUnique({ where: { id: recommendation.id } })).resolves.toBeNull();
+    await expect(db.tagSuggestionFeedback.findUnique({ where: { id: feedback.id } })).resolves.toBeNull();
     await expect(
       db.emailDraftDocument.findUnique({
         where: { emailDraftId_documentId: { emailDraftId: emailDraft.id, documentId: document.id } },

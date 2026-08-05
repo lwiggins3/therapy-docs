@@ -13,15 +13,22 @@ export interface EmailAttachment {
 }
 
 /** Builds a full RFC 2822 message for Gmail's drafts.create — Subject + plain-text body + one
- * attachment per approved document. "To" is deliberately left blank: Patient records
- * intentionally store no email address (data minimization, see docs/hipaa-compliance.md) — the
- * therapist fills in the recipient themselves before sending from their own Gmail. */
+ * attachment per approved document. "To" is prefilled from the patient's on-file email when set
+ * (see docs/hipaa-compliance.md's data-minimization note — storing it is a deliberate, opt-in
+ * exception made specifically for this); otherwise left blank for the therapist to fill in
+ * themselves before sending from their own Gmail. */
 export async function buildRawEmailMessage(input: {
   subject: string;
   body: string;
   attachments: EmailAttachment[];
+  to?: string;
 }): Promise<string> {
-  const mail = new MailComposer({ subject: input.subject, text: input.body, attachments: input.attachments });
+  const mail = new MailComposer({
+    subject: input.subject,
+    text: input.body,
+    attachments: input.attachments,
+    ...(input.to ? { to: input.to } : {}),
+  });
   const message = await new Promise<Buffer>((resolve, reject) => {
     mail.compile().build((error, message) => {
       if (error) reject(error);
@@ -98,7 +105,11 @@ export class EmailDraftsService {
     const gmail = await this.gmailService.getAuthorizedGmailClient(input.therapistId);
     const { data } = await gmail.users.drafts.create({
       userId: "me",
-      requestBody: { message: { raw: await buildRawEmailMessage({ subject, body, attachments }) } },
+      requestBody: {
+        message: {
+          raw: await buildRawEmailMessage({ subject, body, attachments, to: transcript.patient.email ?? undefined }),
+        },
+      },
     });
     if (!data.id) {
       throw new Error("Gmail did not return a draft id");

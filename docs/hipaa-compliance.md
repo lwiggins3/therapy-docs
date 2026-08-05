@@ -78,7 +78,13 @@ See `packages/audit/README.md` for what must call this logger and when.
 
 ## Data minimization
 
-`Patient` records store only a display name/identifier and an optional external MRN reference —
-no other demographic or clinical data is duplicated into this system beyond what's in the
-uploaded transcripts/documents themselves. Keep new fields to the minimum necessary as the data
-model evolves.
+`Patient` records store a display name/identifier, an optional external MRN reference, and — as
+of `docs/roadmap.md`'s patient-email item — an optional email address. The email field is a
+deliberate, narrow exception to an otherwise strict minimization stance: it exists solely to
+prefill the "To" address on the Gmail draft created in `EmailDraftsService.finalize()`
+(`apps/api/src/email-drafts/email-drafts.service.ts`), saving the therapist from retyping it each
+time. It does not change anything else about the email flow — the application still only ever
+creates a Gmail *draft* (`gmail.compose` scope), never sends, and the therapist still reviews and
+sends from their own mailbox. No other demographic or clinical data is duplicated into this
+system beyond what's in the uploaded transcripts/documents themselves. Keep new fields to the
+minimum necessary as the data model evolves.

@@ -3,6 +3,7 @@ import type { DocumentRecommendation, LlmClient, TagFeedbackExample, TagSuggesti
 import { buildDraftEmailPrompt, parseDraftEmailResponse } from "../draft-email";
 import { buildRecommendDocumentsPrompt, parseRecommendDocumentsResponse } from "../recommend-documents";
 import { buildSuggestTagsPrompt, parseTagSuggestionsResponse } from "../suggest-tags";
+import { buildSummarizeTranscriptPrompt, parseSummarizeTranscriptResponse } from "../summarize-transcript";
 import { embedWithVertexAi } from "../vertex-embedding";
 
 /** Native Gemini on Vertex AI — first-party GCP product, simplest IAM/quota story. */
@@ -83,5 +84,18 @@ export class GeminiLlmClient implements LlmClient {
       throw new Error("Gemini response contained no text");
     }
     return parseDraftEmailResponse(text);
+  }
+
+  async summarizeTranscript(input: { transcriptText: string }): Promise<string> {
+    const model = this.vertexAi.getGenerativeModel({
+      model: this.model,
+      generationConfig: { responseMimeType: "application/json" },
+    });
+    const result = await model.generateContent(buildSummarizeTranscriptPrompt(input));
+    const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      throw new Error("Gemini response contained no text");
+    }
+    return parseSummarizeTranscriptResponse(text);
   }
 }

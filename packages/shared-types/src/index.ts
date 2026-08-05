@@ -29,6 +29,7 @@ export const PatientSchema = z.object({
   therapistId: z.string().uuid(),
   displayName: z.string().min(1),
   externalMrn: z.string().optional(),
+  email: z.string().email().optional(),
   createdAt: z.coerce.date(),
 });
 export type Patient = z.infer<typeof PatientSchema>;
@@ -40,6 +41,7 @@ export const TranscriptSchema = z.object({
   gcsUri: z.string(),
   status: z.enum(["processing", "ready", "failed"]),
   sessionDate: z.coerce.date().optional(),
+  summary: z.string().optional(),
   createdAt: z.coerce.date(),
 });
 export type Transcript = z.infer<typeof TranscriptSchema>;

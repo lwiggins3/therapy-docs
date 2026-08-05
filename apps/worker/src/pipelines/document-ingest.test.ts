@@ -37,6 +37,10 @@ class StubLlmClient implements LlmClient {
   async draftEmail(): Promise<{ subject: string; body: string }> {
     throw new Error("not used in this test");
   }
+
+  async summarizeTranscript(): Promise<string> {
+    throw new Error("not used in this test");
+  }
 }
 
 describe("handleDocumentIngest", () => {

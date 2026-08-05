@@ -27,4 +27,23 @@ describe("buildRawEmailMessage", () => {
     expect(message).toContain("Subject: No docs");
     expect(message).toContain("Just text.");
   });
+
+  it("prefills the To header when a recipient is passed", async () => {
+    const raw = await buildRawEmailMessage({
+      subject: "Resources",
+      body: "Hi there.",
+      attachments: [],
+      to: "patient@example.com",
+    });
+    const message = Buffer.from(raw, "base64url").toString("utf-8");
+
+    expect(message).toContain("To: patient@example.com");
+  });
+
+  it("omits the To header when no recipient is passed", async () => {
+    const raw = await buildRawEmailMessage({ subject: "Resources", body: "Hi there.", attachments: [] });
+    const message = Buffer.from(raw, "base64url").toString("utf-8");
+
+    expect(message).not.toContain("To:");
+  });
 });

@@ -21,9 +21,10 @@ export interface TranscriptIngestDeps {
 }
 
 /**
- * Transcript ingestion + recommendation pipeline: extract text, embed it, pre-filter candidate
- * library documents via vector similarity, then ask the LLM to rank/justify a final shortlist.
- * Every step that touches transcript content must log through @therapy-docs/audit.
+ * Transcript ingestion + recommendation pipeline: extract text, summarize it, embed it,
+ * pre-filter candidate library documents via vector similarity, then ask the LLM to
+ * rank/justify a final shortlist. Every step that touches transcript content must log through
+ * @therapy-docs/audit.
  */
 export async function handleTranscriptIngest(
   message: PubSubTranscriptIngestMessage,
@@ -52,6 +53,8 @@ export async function handleTranscriptIngest(
 
     const fileData = await deps.storage.download({ uri: message.gcsUri });
     const text = await deps.textExtractor.extractText({ data: fileData, mimeType: transcript.mimeType });
+
+    const summary = await deps.llmClient.summarizeTranscript({ transcriptText: text });
 
     const embedding = await deps.llmClient.embed({ text });
     await db.$executeRaw`
@@ -99,7 +102,7 @@ export async function handleTranscriptIngest(
 
     await db.transcript.update({
       where: { id: transcript.id },
-      data: { status: "ready" },
+      data: { status: "ready", summary },
     });
   } catch (err) {
     console.error(`Transcript ingest failed for ${message.transcriptId}:`, err);

@@ -138,6 +138,7 @@ export class DocumentsService {
     }
 
     await db.$transaction([
+      db.tagSuggestionFeedback.deleteMany({ where: { documentId: id } }),
       db.documentTagAssignment.deleteMany({ where: { documentId: id } }),
       db.emailDraftDocument.deleteMany({ where: { documentId: id } }),
       db.recommendation.deleteMany({ where: { documentId: id } }),
