@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
+  HttpCode,
   NotFoundException,
   Param,
   Post,
@@ -59,5 +61,14 @@ export class TranscriptsController {
       throw new NotFoundException(`Transcript not found: ${id}`);
     }
     return transcript;
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  async delete(@Param("id") id: string, @Headers("x-therapist-id") therapistId: string) {
+    if (!therapistId) {
+      throw new BadRequestException("Missing x-therapist-id header");
+    }
+    await this.transcriptsService.deleteTranscript(id, therapistId);
   }
 }

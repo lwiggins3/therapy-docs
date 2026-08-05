@@ -51,4 +51,20 @@ describe("LocalDiskStorageClient", () => {
   it("throws when downloading a uri that isn't local://", async () => {
     await expect(client.download({ uri: "gs://some-bucket/file.pdf" })).rejects.toThrow(/Not a local:\/\/ URI/);
   });
+
+  it("removes the file on delete so a subsequent download fails", async () => {
+    const { uri } = await client.upload({
+      key: "to-delete.txt",
+      data: Buffer.from("bye"),
+      contentType: "text/plain",
+    });
+
+    await client.delete({ uri });
+
+    await expect(client.download({ uri })).rejects.toThrow();
+  });
+
+  it("throws when deleting a uri that isn't local://", async () => {
+    await expect(client.delete({ uri: "gs://some-bucket/file.pdf" })).rejects.toThrow(/Not a local:\/\/ URI/);
+  });
 });

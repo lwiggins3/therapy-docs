@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const save = vi.fn().mockResolvedValue(undefined);
 const download = vi.fn().mockResolvedValue([Buffer.from("downloaded content")]);
-const file = vi.fn().mockReturnValue({ save, download });
+const deleteFile = vi.fn().mockResolvedValue(undefined);
+const file = vi.fn().mockReturnValue({ save, download, delete: deleteFile });
 const bucket = vi.fn().mockReturnValue({ file });
 
 vi.mock("@google-cloud/storage", () => ({
@@ -17,6 +18,7 @@ describe("GcsStorageClient", () => {
   beforeEach(() => {
     save.mockClear();
     download.mockClear();
+    deleteFile.mockClear();
     file.mockClear();
     bucket.mockClear();
   });
@@ -47,5 +49,21 @@ describe("GcsStorageClient", () => {
     const client = new GcsStorageClient({ bucket: "my-bucket" });
 
     await expect(client.download({ uri: "local://some/key.pdf" })).rejects.toThrow(/Not a gs:\/\/ URI/);
+  });
+
+  it("parses bucket and key out of a gs:// uri and deletes that object", async () => {
+    const client = new GcsStorageClient({ bucket: "default-bucket" });
+
+    await client.delete({ uri: "gs://other-bucket/some/key.pdf" });
+
+    expect(bucket).toHaveBeenCalledWith("other-bucket");
+    expect(file).toHaveBeenCalledWith("some/key.pdf");
+    expect(deleteFile).toHaveBeenCalled();
+  });
+
+  it("throws when deleting a uri that isn't gs://", async () => {
+    const client = new GcsStorageClient({ bucket: "my-bucket" });
+
+    await expect(client.delete({ uri: "local://some/key.pdf" })).rejects.toThrow(/Not a gs:\/\/ URI/);
   });
 });

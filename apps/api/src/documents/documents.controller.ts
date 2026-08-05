@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -57,5 +59,14 @@ export class DocumentsController {
       throw new BadRequestException("Missing x-therapist-id header");
     }
     return this.documentsService.updateTags(id, therapistId, body);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  async delete(@Param("id") id: string, @Headers("x-therapist-id") therapistId: string) {
+    if (!therapistId) {
+      throw new BadRequestException("Missing x-therapist-id header");
+    }
+    await this.documentsService.deleteDocument(id, therapistId);
   }
 }

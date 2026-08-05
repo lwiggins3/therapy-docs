@@ -429,19 +429,41 @@ This was a from-scratch build, unlike items 1/4 — no OAuth code, no token stor
       existing per-document pipeline (item 1). Tracked in
       [#6](https://github.com/lwiggins3/therapy-docs/issues/6).
 
-## 9. Delete documents and transcripts (feature request)
+## 9. Delete documents and transcripts (feature request) — DONE
 
 Found missing during the real end-to-end browser test (item 6) — there's currently no way to
 remove a library document or a transcript once uploaded, from the UI or the API. Tracked in
-[#7](https://github.com/lwiggins3/therapy-docs/issues/7).
+[#7](https://github.com/lwiggins3/therapy-docs/issues/7), now closed.
 
-- [ ] `apps/api`: `DELETE /documents/:id` (remove the `LibraryDocument` row + its
-      `DocumentTagAssignment`/`Recommendation`/`EmailDraftDocument` references, and the underlying
-      GCS object via `StorageClient`) and `DELETE /transcripts/:id` (same, for `Transcript` +
-      its `Recommendation`/`EmailDraft` references) — both scoped to the calling therapist,
-      mirroring the ownership checks already used in `updateTags`/`EmailDraftsService.finalize`
-- [ ] `apps/web`: a delete action on `/documents` (per document row) and `/transcripts` (per
-      transcript row), with a confirmation step before removing
+- [x] `packages/storage`: added `delete(input: { uri })` to the `StorageClient` interface and
+      both adapters (`LocalDiskStorageClient` via `unlink`, `GcsStorageClient` via
+      `file.delete()`) — the interface only had `upload`/`download` before this.
+- [x] `apps/api`: `DELETE /documents/:id` — removes the `LibraryDocument` row and its
+      `DocumentTagAssignment`/`Recommendation`/`EmailDraftDocument` references in one
+      `db.$transaction`, then deletes the underlying storage object. The parent `EmailDraft` row
+      is deliberately left alone (it's a historical record of what was sent — only the join row
+      pointing at the now-gone document is removed).
+- [x] `apps/api`: `DELETE /transcripts/:id` — removes the `Transcript` row and its
+      `Recommendation`/`EmailDraft` (and `EmailDraft`'s own `EmailDraftDocument` rows, deleted
+      first since nothing cascades) references, then the underlying storage object.
+- [x] Both scoped to the calling therapist, mirroring the ownership-check pattern already used in
+      `updateTags`/`EmailDraftsService.finalize` (404 if not found, 403 if it belongs to a
+      different therapist).
+- [x] `apps/web`: a "Delete" button per row on `/documents` and `/transcripts`, gated behind a
+      `confirm()` prompt before the request fires.
+- [x] Real integration tests (`documents.service.test.ts`, `transcripts.service.test.ts`) against
+      the real local Postgres — seed a document/transcript plus every kind of dependent row
+      (tags, recommendations, an email draft + its join row), delete it, and assert everything
+      that should be gone is gone, the storage object is actually unreadable afterward, and the
+      surviving `EmailDraft` really does survive. Plus `packages/storage`'s new `delete()` tests
+      (round-trip + malformed-uri error, both adapters).
+- [x] `pnpm turbo run lint typecheck test` clean across all touched packages/apps.
+- [x] **Verified against the real local stack, not just tests.** Uploaded a real document and a
+      real transcript through the live API, confirmed the files existed on disk, then walked
+      through `DELETE` with no `x-therapist-id` header (400), the wrong therapist (403), the
+      correct therapist (204), confirmed the row dropped out of `GET /documents`, the file was
+      gone from disk, `GET /transcripts/:id` now 404s, and a repeat `DELETE` on the same id also
+      404s (not a silent no-op).
 
 ## 10. Tag suggestion feedback loop (feature request)
 

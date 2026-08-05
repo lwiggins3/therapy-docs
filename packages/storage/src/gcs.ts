@@ -1,6 +1,15 @@
 import { Storage } from "@google-cloud/storage";
 import type { StorageClient } from "./types";
 
+function bucketAndKeyFromUri(uri: string): { bucket: string; key: string } {
+  const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(uri);
+  if (!match?.[1] || !match[2]) {
+    throw new Error(`Not a gs:// URI: ${uri}`);
+  }
+  const [, bucket, key] = match;
+  return { bucket, key };
+}
+
 /** Real GCS-backed storage. URIs are `gs://<bucket>/<key>`. */
 export class GcsStorageClient implements StorageClient {
   private readonly storage: Storage;
@@ -18,12 +27,13 @@ export class GcsStorageClient implements StorageClient {
   }
 
   async download(input: { uri: string }): Promise<Buffer> {
-    const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(input.uri);
-    if (!match?.[1] || !match[2]) {
-      throw new Error(`Not a gs:// URI: ${input.uri}`);
-    }
-    const [, bucket, key] = match;
+    const { bucket, key } = bucketAndKeyFromUri(input.uri);
     const [data] = await this.storage.bucket(bucket).file(key).download();
     return data;
+  }
+
+  async delete(input: { uri: string }): Promise<void> {
+    const { bucket, key } = bucketAndKeyFromUri(input.uri);
+    await this.storage.bucket(bucket).file(key).delete();
   }
 }

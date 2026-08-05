@@ -5,4 +5,5 @@
 export interface StorageClient {
   upload(input: { key: string; data: Buffer; contentType: string }): Promise<{ uri: string }>;
   download(input: { uri: string }): Promise<Buffer>;
+  delete(input: { uri: string }): Promise<void>;
 }

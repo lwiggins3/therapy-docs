@@ -42,6 +42,18 @@ export default function DocumentsPage() {
     await loadDocuments(therapistId);
   }
 
+  async function deleteDocument(documentId: string, title: string) {
+    if (!therapistId) return;
+    if (!confirm(`Delete "${title}"? This also removes it from any past recommendations and drafts.`)) {
+      return;
+    }
+    await fetch(`${apiUrl}/documents/${documentId}`, {
+      method: "DELETE",
+      headers: { "x-therapist-id": therapistId },
+    });
+    await loadDocuments(therapistId);
+  }
+
   return (
     <main>
       <h1>Document library</h1>
@@ -52,7 +64,8 @@ export default function DocumentsPage() {
       <ul>
         {documents.map((doc) => (
           <li key={doc.id} style={{ marginBottom: "1.5rem" }}>
-            <strong>{doc.title}</strong> — {doc.status}
+            <strong>{doc.title}</strong> — {doc.status}{" "}
+            <button onClick={() => deleteDocument(doc.id, doc.title)}>Delete</button>
             <ul>
               {doc.tags.map((assignment) => (
                 <li key={assignment.tag.id}>

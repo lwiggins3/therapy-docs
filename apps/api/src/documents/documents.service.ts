@@ -109,4 +109,23 @@ export class DocumentsService {
       include: { tags: { include: { tag: true } } },
     });
   }
+
+  async deleteDocument(id: string, therapistId: string) {
+    const document = await db.libraryDocument.findUnique({ where: { id } });
+    if (!document) {
+      throw new NotFoundException(`Document not found: ${id}`);
+    }
+    if (document.therapistId !== therapistId) {
+      throw new ForbiddenException("Document belongs to a different therapist");
+    }
+
+    await db.$transaction([
+      db.documentTagAssignment.deleteMany({ where: { documentId: id } }),
+      db.emailDraftDocument.deleteMany({ where: { documentId: id } }),
+      db.recommendation.deleteMany({ where: { documentId: id } }),
+      db.libraryDocument.delete({ where: { id } }),
+    ]);
+
+    await this.storage.delete({ uri: document.gcsUri });
+  }
 }

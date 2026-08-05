@@ -1,6 +1,14 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { StorageClient } from "./types";
+
+function keyFromUri(uri: string): string {
+  const match = /^local:\/\/(.+)$/.exec(uri);
+  if (!match?.[1]) {
+    throw new Error(`Not a local:// URI: ${uri}`);
+  }
+  return match[1];
+}
 
 /** Dev/test storage: writes under a local directory. URIs are `local://<key>`. */
 export class LocalDiskStorageClient implements StorageClient {
@@ -18,10 +26,10 @@ export class LocalDiskStorageClient implements StorageClient {
   }
 
   async download(input: { uri: string }): Promise<Buffer> {
-    const match = /^local:\/\/(.+)$/.exec(input.uri);
-    if (!match?.[1]) {
-      throw new Error(`Not a local:// URI: ${input.uri}`);
-    }
-    return readFile(join(this.baseDir, match[1]));
+    return readFile(join(this.baseDir, keyFromUri(input.uri)));
+  }
+
+  async delete(input: { uri: string }): Promise<void> {
+    await unlink(join(this.baseDir, keyFromUri(input.uri)));
   }
 }

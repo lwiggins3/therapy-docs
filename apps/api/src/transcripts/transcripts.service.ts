@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { db } from "@therapy-docs/db";
 import { createStorageClient, type StorageClient } from "@therapy-docs/storage";
 import { PubSubPublisher } from "../lib/pubsub";
@@ -63,5 +63,27 @@ export class TranscriptsService {
 
   async getTranscript(id: string) {
     return db.transcript.findUnique({ where: { id }, include: { patient: true } });
+  }
+
+  async deleteTranscript(id: string, therapistId: string) {
+    const transcript = await db.transcript.findUnique({ where: { id } });
+    if (!transcript) {
+      throw new NotFoundException(`Transcript not found: ${id}`);
+    }
+    if (transcript.therapistId !== therapistId) {
+      throw new ForbiddenException("Transcript belongs to a different therapist");
+    }
+
+    const emailDrafts = await db.emailDraft.findMany({ where: { transcriptId: id }, select: { id: true } });
+    const emailDraftIds = emailDrafts.map((draft) => draft.id);
+
+    await db.$transaction([
+      db.emailDraftDocument.deleteMany({ where: { emailDraftId: { in: emailDraftIds } } }),
+      db.emailDraft.deleteMany({ where: { transcriptId: id } }),
+      db.recommendation.deleteMany({ where: { transcriptId: id } }),
+      db.transcript.delete({ where: { id } }),
+    ]);
+
+    await this.storage.delete({ uri: transcript.gcsUri });
   }
 }
