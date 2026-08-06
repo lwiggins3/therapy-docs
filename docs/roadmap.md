@@ -675,3 +675,11 @@ clicking into a transcript only showed the recommendation list. Mirrors the exis
 - [x] **Verified against the real local stack**: confirmed the patient filter narrows the list to
       just the matching patient's transcripts; sort/date controls render and are wired to the
       same `visibleTranscripts` derivation.
+
+## 18. CI cleanup — minor
+
+- [ ] `.github/workflows/deploy.yml`'s `actions/checkout@v4`, `google-github-actions/auth@v2`, and
+      `google-github-actions/setup-gcloud@v2` target Node.js 20 internally, which GitHub Actions
+      has deprecated — runs currently succeed only because GitHub is auto-forcing them onto
+      Node 24 as a stopgap. Not urgent (nothing is failing), but bump to whatever versions of
+      these actions target Node 24 natively before the stopgap goes away.
